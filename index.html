@@ -1497,15 +1497,55 @@ async function saveVslCfg(){
   const btn = document.getElementById('vslCfgBtn');
   btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
 
-  // ถ้าเปลี่ยนชื่อเรือ หรือเปลี่ยนวันที่ → ลบ WEB rows เก่าออกจาก Supabase อัตโนมัติ
-  const vesselChanged   = oldVessel   && oldVessel   !== vessel;
-  const dateChanged     = oldSailDate && oldSailDate !== sailDate;
+  // ถ้าเปลี่ยนชื่อเรือ หรือเปลี่ยนวันที่ → migrate WEB rows ไปวันที่/ชื่อใหม่
+  const vesselChanged = oldVessel   && oldVessel   !== vessel;
+  const dateChanged   = oldSailDate && oldSailDate !== sailDate;
   if((vesselChanged || dateChanged) && oldVessel && oldSailDate){
-    await sb.from('vessel_plan')
-      .delete()
-      .eq('sheet_name', 'WEB')
+    // 1) อ่าน rows เก่าจาก Supabase ก่อนลบ
+    const { data: oldRows } = await sb.from('vessel_plan')
+      .select('invoice_no,destination,bkg_no,vol,notes')
+      .eq('sheet_name','WEB')
       .eq('vessel_name', oldVessel)
       .eq('sail_date',   oldSailDate);
+
+    // 2) ลบ rows เก่า
+    await sb.from('vessel_plan').delete()
+      .eq('sheet_name','WEB')
+      .eq('vessel_name', oldVessel)
+      .eq('sail_date',   oldSailDate);
+
+    // 3) ดู localStorage draft ก่อน — ถ้ามีให้ใช้ draft (ข้อมูลล่าสุด)
+    //    ถ้าไม่มี ให้ migrate rows เก่าไปวันที่/ชื่อใหม่แทน
+    const invDraft = loadInvDraft(idx);
+    const loyDraft = loadLoyRows(idx);
+    const hasDraft = invDraft.some(r=>r.inv) || loyDraft.some(r=>r.bkg);
+
+    let payload = [];
+    if(hasDraft){
+      invDraft.forEach(r => {
+        if(!r.inv) return;
+        payload.push({ sheet_name:'WEB', vessel_name:vessel, sail_date:sailDate,
+          invoice_no:r.inv, destination:r.des||null, bkg_no:r.bkg||null, vol:parseInt(r.vol)||null, notes:null });
+      });
+      let loySeq = 0;
+      loyDraft.forEach(r => {
+        if(!r.bkg) return;
+        loySeq++;
+        payload.push({ sheet_name:'WEB', vessel_name:vessel, sail_date:sailDate,
+          invoice_no:`LOY-${loySeq}`, destination:null, bkg_no:r.bkg, vol:parseInt(r.vol)||null, notes:r.rem||null });
+      });
+    } else if(oldRows && oldRows.length){
+      // ไม่มี draft → migrate Supabase rows เก่าไปวันที่/ชื่อใหม่
+      payload = oldRows.map(r => ({
+        sheet_name:'WEB', vessel_name:vessel, sail_date:sailDate,
+        invoice_no:r.invoice_no, destination:r.destination,
+        bkg_no:r.bkg_no, vol:r.vol, notes:r.notes
+      }));
+    }
+
+    if(payload.length){
+      await sb.from('vessel_plan').insert(payload);
+    }
   }
 
   btn.textContent = '✅ บันทึกแล้ว'; btn.style.background = '#0f2a52'; btn.disabled = false;
