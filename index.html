@@ -123,6 +123,7 @@ table.data-tbl tr:hover td{background:#f8fafc;}
 .cal-chip:hover{opacity:.8;}
 .cal-chip.planned{background:#dbeafe;color:#1d4ed8;}
 .cal-chip.done{background:#dcfce7;color:#15803d;}
+.cal-chip.float{background:#fef9c3;color:#854d0e;border:1px dashed #fbbf24;}
 /* Detail panel */
 .cal-detail{background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);padding:20px;margin-top:16px;animation:slideIn .2s ease;}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -133,6 +134,7 @@ table.data-tbl tr:hover td{background:#f8fafc;}
 .cal-badge{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:800;margin-left:8px;}
 .cal-badge.planned{background:#dbeafe;color:#1d4ed8;}
 .cal-badge.done{background:#dcfce7;color:#15803d;}
+.cal-badge.float{background:#fef9c3;color:#854d0e;}
 .cal-inv-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
 .cal-inv-table th{padding:7px 10px;text-align:left;font-weight:700;color:#64748b;border-bottom:2px solid #e2e8f0;background:#f8fafc;}
 .cal-inv-table td{padding:7px 10px;border-bottom:1px solid #f1f5f9;}
@@ -525,8 +527,9 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
         </div>
         <!-- Legend -->
         <div style="display:flex;gap:12px;margin-bottom:12px;font-size:11px;font-weight:700;align-items:center;">
-          <span><span class="cal-chip planned" style="display:inline-block;padding:2px 8px;">แพลน</span> กำลังแพลน (vessel_plan)</span>
-          <span><span class="cal-chip done" style="display:inline-block;padding:2px 8px;">ออกแล้ว</span> ออกไปแล้ว (DATABASE)</span>
+          <span><span class="cal-chip planned" style="display:inline-block;padding:2px 8px;">🚢 แพลน</span> กำลังแพลน (vessel_plan)</span>
+          <span><span class="cal-chip float" style="display:inline-block;padding:2px 8px;">⚓ ลอย</span> บุคกิ้งลอย</span>
+          <span><span class="cal-chip done" style="display:inline-block;padding:2px 8px;">✅ ออกแล้ว</span> ออกไปแล้ว (DATABASE)</span>
         </div>
         <div class="cal-grid" id="calGrid"></div>
         <div id="calDetail"></div>
@@ -712,7 +715,7 @@ function renderCal(){
   // รวบรวมเรือตามวัน
   const dayMap = {}; // 'YYYY-MM-DD' → {planned:[...], done:[...]}
 
-  // จัด vessel_plan — group by vessel+date
+  // จัด vessel_plan — group by vessel+date แยก float (LOY ล้วน) vs planned (มี invoice จริง)
   const planByVessel = {};
   calPlanData.forEach(r => {
     const d = String(r.sail_date||'').substring(0,10);
@@ -721,8 +724,13 @@ function renderCal(){
     planByVessel[key].rows.push(r);
   });
   Object.values(planByVessel).forEach(v => {
-    if(!dayMap[v.date]) dayMap[v.date]={planned:[],done:[]};
-    dayMap[v.date].planned.push(v);
+    if(!dayMap[v.date]) dayMap[v.date]={planned:[],done:[],float:[]};
+    const hasRealInv = v.rows.some(r => !(r.invoice_no||'').toUpperCase().startsWith('LOY-'));
+    if(hasRealInv){
+      dayMap[v.date].planned.push(v);
+    } else {
+      dayMap[v.date].float.push(v);
+    }
   });
 
   // จัด vessels DB — group by vessel+date
@@ -734,7 +742,7 @@ function renderCal(){
     doneByVessel[key].rows.push(r);
   });
   Object.values(doneByVessel).forEach(v => {
-    if(!dayMap[v.date]) dayMap[v.date]={planned:[],done:[]};
+    if(!dayMap[v.date]) dayMap[v.date]={planned:[],done:[],float:[]};
     dayMap[v.date].done.push(v);
   });
 
@@ -747,8 +755,8 @@ function renderCal(){
   for(let day=1;day<=daysInMonth;day++){
     const iso = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const isToday = iso === today;
-    const info = dayMap[iso] || {planned:[],done:[]};
-    const hasData = info.planned.length + info.done.length > 0;
+    const info = dayMap[iso] || {planned:[],done:[],float:[]};
+    const hasData = info.planned.length + info.done.length + info.float.length > 0;
 
     let chips = '';
     info.done.forEach(v => {
@@ -758,6 +766,10 @@ function renderCal(){
     info.planned.forEach(v => {
       const short = v.vessel.replace(/OOCL /i,'').replace(/ \d+N$/i,'');
       chips += `<span class="cal-chip planned" onclick="showCalDetail('${iso}','planned','${encodeURIComponent(v.vessel)}')" title="${v.vessel}">🚢 ${short}</span>`;
+    });
+    info.float.forEach(v => {
+      const short = v.vessel.replace(/OOCL /i,'').replace(/ \d+N$/i,'');
+      chips += `<span class="cal-chip float" onclick="showCalDetail('${iso}','float','${encodeURIComponent(v.vessel)}')" title="${v.vessel}">⚓ ${short}</span>`;
     });
 
     html += `<div class="cal-cell${isToday?' today':''}${!hasData?' no-ship':''}">
@@ -817,6 +829,37 @@ function showCalDetail(isoDate, type, encodedVessel){
           <th style="text-align:center;">ตู้</th><th>ประเภท</th>
         </tr></thead>
         <tbody>${tbody||'<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">ยังไม่มีข้อมูล</td></tr>'}</tbody>
+      </table>`;
+
+  } else if(type === 'float'){
+    // บุคกิ้งลอย — LOY-only rows from vessel_plan
+    const entries = calPlanData.filter(r =>
+      String(r.sail_date||'').substring(0,10) === isoDate && r.vessel_name === vessel
+      && (r.invoice_no||'').toUpperCase().startsWith('LOY-')
+    );
+    titleBadge = `<span class="cal-badge float">⚓ บุคกิ้งลอย</span>`;
+    const total = entries.reduce((s,r)=>s+(r.vol||0),0);
+    let tbody = '';
+    entries.forEach((r,i) => {
+      tbody += `<tr style="background:${i%2===0?'#fff':'#fefce8'};">
+        <td style="color:#854d0e;font-weight:600;">⚓ ลอย</td>
+        <td>${r.destination||'-'}</td>
+        <td>${r.bkg_no||'-'}</td>
+        <td style="text-align:center;font-weight:700;">${r.vol||'-'}</td>
+        <td><span style="font-size:10px;background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:4px;">ลอย${r.notes?' · '+r.notes:''}</span></td>
+      </tr>`;
+    });
+    colsHtml = `
+      <div style="font-size:12px;margin-bottom:10px;">
+        ⚓ บุคกิ้งลอย: <strong>${entries.length} booking · ${total} ตู้</strong>
+        <span style="font-size:11px;color:#92400e;margin-left:8px;">(ยังไม่ผูก Invoice)</span>
+      </div>
+      <table class="cal-inv-table">
+        <thead><tr>
+          <th>ประเภท</th><th>ปลายทาง</th><th>BKG NO.</th>
+          <th style="text-align:center;">ตู้</th><th>หมายเหตุ</th>
+        </tr></thead>
+        <tbody>${tbody||'<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">ไม่มีข้อมูล</td></tr>'}</tbody>
       </table>`;
 
   } else {
