@@ -1557,36 +1557,17 @@ async function saveVslCfg(){
       .eq('vessel_name', oldVessel)
       .eq('sail_date',   oldSailDate);
 
-    // 3) ดู localStorage draft ก่อน — ถ้ามีให้ใช้ draft (ข้อมูลล่าสุด)
-    //    ถ้าไม่มี ให้ migrate rows เก่าไปวันที่/ชื่อใหม่แทน
-    const invDraft = loadInvDraft(idx);
-    const loyDraft = loadLoyRows(idx);
-    const hasDraft = invDraft.some(r=>r.inv) || loyDraft.some(r=>r.bkg);
+    // 3) ล้าง draft เก่าทิ้ง — ป้องกัน draft เรือเก่าถูกนำไปใส่เรือใหม่ (BUG FIX)
+    localStorage.removeItem(getInvKey(idx));
+    localStorage.removeItem(getLoyKey(idx));
 
-    let payload = [];
-    if(hasDraft){
-      invDraft.forEach(r => {
-        if(!r.inv) return;
-        payload.push({ sheet_name:'WEB', vessel_name:vessel, sail_date:sailDate,
-          invoice_no:r.inv, destination:r.des||null, bkg_no:r.bkg||null, vol:parseInt(r.vol)||null, notes:null });
-      });
-      let loySeq = 0;
-      loyDraft.forEach(r => {
-        if(!r.bkg) return;
-        loySeq++;
-        payload.push({ sheet_name:'WEB', vessel_name:vessel, sail_date:sailDate,
-          invoice_no:`LOY-${loySeq}`, destination:null, bkg_no:r.bkg, vol:parseInt(r.vol)||null, notes:r.rem||null });
-      });
-    } else if(oldRows && oldRows.length){
-      // ไม่มี draft → migrate Supabase rows เก่าไปวันที่/ชื่อใหม่
-      payload = oldRows.map(r => ({
+    // 4) migrate Supabase rows เก่าไปวันที่/ชื่อใหม่ (เสมอ — ไม่ใช้ draft เก่า)
+    if(oldRows && oldRows.length){
+      const payload = oldRows.map(r => ({
         sheet_name:'WEB', vessel_name:vessel, sail_date:sailDate,
         invoice_no:r.invoice_no, destination:r.destination,
         bkg_no:r.bkg_no, vol:r.vol, notes:r.notes
       }));
-    }
-
-    if(payload.length){
       await sb.from('vessel_plan').insert(payload);
     }
   }
