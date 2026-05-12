@@ -379,6 +379,13 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
           </table>
         </div>
 
+        <!-- ── BATCH SUM BAR ── -->
+        <div id="batchSum" style="display:none;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 18px;margin-bottom:10px;gap:24px;font-size:13px;font-weight:700;color:#166534;align-items:center;flex-wrap:wrap;">
+          <span>📤 OUT รวม: <span id="batchSumOut" style="font-size:15px;">0.00</span> RM</span>
+          <span>📥 IN รวม: <span id="batchSumIn" style="font-size:15px;">0.00</span> RM</span>
+          <span style="border-left:2px solid #86efac;padding-left:20px;">⚖️ NET: <span id="batchSumNet" style="font-size:15px;">0.00</span> RM</span>
+        </div>
+
         <div class="btn-row">
           <button class="btn btn-secondary" onclick="addEmptyRow()">✏️ เพิ่มแถวเปล่า</button>
           <button class="btn btn-primary" id="stmtSaveBtn" onclick="saveBatch()">💾 บันทึกทั้งหมด <span id="saveCountBadge"></span></button>
@@ -1059,6 +1066,10 @@ function insertBatchRow(type, desc, rawInv){
     <td><button class="batch-del" onclick="removeBatchRow(${id})" title="ลบแถวนี้">🗑</button></td>`;
   tbody.appendChild(tr);
   updateSaveCount();
+  // Hook live sum recalc
+  document.getElementById('bt_'+id+'_out').addEventListener('input', recalcBatchSum);
+  document.getElementById('bt_'+id+'_in').addEventListener('input',  recalcBatchSum);
+  recalcBatchSum();
   // Focus amount field
   setTimeout(()=>document.getElementById('bt_'+id+'_out')?.focus(), 50);
 }
@@ -1070,6 +1081,7 @@ function removeBatchRow(id){
       '<tr id="batchEmpty"><td colspan="6" class="empty" style="padding:18px;">กด "+ เพิ่มแถว" หรือเลือกจาก dropdown ด้านบน</td></tr>';
   }
   updateSaveCount();
+  recalcBatchSum();
 }
 
 function updateSaveCount(){
@@ -1082,11 +1094,31 @@ function updateSaveCount(){
   document.getElementById('saveCountBadge').textContent = rows.length ? `(${rows.length} แถว)` : '';
 }
 
+function recalcBatchSum(){
+  let out=0, inp=0;
+  document.querySelectorAll('.batch-row').forEach(tr=>{
+    const id = tr.id.replace('brow_','');
+    out += parseFloat(document.getElementById('bt_'+id+'_out')?.value)||0;
+    inp += parseFloat(document.getElementById('bt_'+id+'_in')?.value)||0;
+  });
+  const sumEl = document.getElementById('batchSum');
+  if(!sumEl) return;
+  if(out===0 && inp===0){ sumEl.style.display='none'; return; }
+  sumEl.style.display='flex';
+  document.getElementById('batchSumOut').textContent = out.toFixed(2);
+  document.getElementById('batchSumIn').textContent  = inp.toFixed(2);
+  const net = inp - out;
+  const netEl = document.getElementById('batchSumNet');
+  netEl.textContent = (net>=0?'+':'')+net.toFixed(2);
+  netEl.parentElement.style.color = net>=0?'#166534':'#991b1b';
+}
+
 function clearBatch(){
   document.getElementById('batchBody').innerHTML =
     '<tr id="batchEmpty"><td colspan="6" class="empty" style="padding:18px;">กด "+ เพิ่มแถว" หรือเลือกจาก dropdown ด้านบน</td></tr>';
   batchRowId = 0;
   updateSaveCount();
+  recalcBatchSum();
 }
 
 // ── Save all batch rows ──
