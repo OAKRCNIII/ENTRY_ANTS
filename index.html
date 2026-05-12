@@ -977,14 +977,17 @@ let plannedInvSet = new Set();   // invoice_no ที่แพลนไปแล
 
 // ── Load pending data (vessels + paid sets) ──
 async function loadPendingData(){
-  const [{ data: vslData }, { data: paidData }] = await Promise.all([
+  const [{ data: vslData }, { data: paidData }, { data: manualPaidData }] = await Promise.all([
     sb.from('vessels').select('invoice_no,vessel_name,sail_date,booking_no,container_count')
       .gte('sail_date','2026-04-01').order('sail_date',{ascending:false}),
-    sb.from('su_statement').select('type,description')
+    sb.from('su_statement').select('type,description'),
+    sb.from('manual_paid').select('invoice_no')
   ]);
   allVessels = vslData || [];
   paidOCFSet = new Set((paidData||[]).filter(r=>r.type==='OCF').map(r=>normInv(r.description)));
   paidTLXSet = new Set((paidData||[]).filter(r=>r.type==='TLX').map(r=>normInv((r.description||'').replace(/^TLX-/i,''))));
+  // ติ๊ก manual paid ใน Dashboard → ซ่อนออกจาก OCF dropdown ด้วย
+  (manualPaidData||[]).forEach(r=>paidOCFSet.add(normInv(r.invoice_no)));
   refreshQuickDropdown();
 }
 
