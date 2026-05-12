@@ -1197,6 +1197,20 @@ function stmtStartEdit(id){
   });
   document.getElementById(`st_ebtn_${id}`).style.display='none';
   document.getElementById(`st_sbtn_${id}`).style.display='';
+
+  /* auto-recalc BALANCE เมื่อ OUT หรือ IN เปลี่ยน */
+  const row = stmtRows.find(r=>r.id===id);
+  if(row){
+    const prevBal = (row.balance||0) + (row.amount_out||0) - (row.amount_in||0);
+    const recalcBal = () => {
+      const out = parseFloat(document.getElementById(`st_out_i_${id}`)?.value)||0;
+      const inp = parseFloat(document.getElementById(`st_in_i_${id}`)?.value)||0;
+      const balEl = document.getElementById(`st_bal_i_${id}`);
+      if(balEl) balEl.value = (prevBal - out + inp).toFixed(2);
+    };
+    document.getElementById(`st_out_i_${id}`)?.addEventListener('input', recalcBal);
+    document.getElementById(`st_in_i_${id}`)?.addEventListener('input', recalcBal);
+  }
 }
 
 // ══════════════════════════════════════════
