@@ -1339,7 +1339,7 @@ const SLOTS_KEY  = 'ants_vessel_slots_v2';
 const SLOT_COUNT = 10;
 const INV_ROWS   = 20;   // แถวซ้าย (invoice)
 const LOY_ROWS   = 12;   // แถวขวา (ลอย)
-const DEST_LIST  = ['NANSHA','SHANGHAI','NINGBO','QINGDAO','TIANJIN','GUANGZHOU'];
+const DEST_LIST  = ['NANSHA','SHANGHAI','NINGBO','QINGDAO','TIANJIN','GUANGZHOU','JIUJIANG ,JIANGXI PORT','HAMBURG','VLADIVOSTOK'];
 
 let currentVslIdx = 0;
 
@@ -1970,7 +1970,7 @@ async function loadDbVessel(){
 }
 
 function renderDbVessel(rows){
-  const DEST = ['NANSHA','VLADIVOSTOK','JAKARTA','SURABAYA','PORT KLANG','SINGAPORE','BANGKOK','LAEM CHABANG','OTHER'];
+  const DEST = ['NANSHA','QINGDAO','JIUJIANG ,JIANGXI PORT','HAMBURG','VLADIVOSTOK','JAKARTA','SURABAYA','PORT KLANG','SINGAPORE','BANGKOK','LAEM CHABANG','OTHER'];
   const tbody = document.getElementById('dbvBody');
   if(!rows.length){ tbody.innerHTML='<tr><td colspan="7" style="padding:24px;text-align:center;color:#94a3b8;">ไม่มีข้อมูล</td></tr>'; return; }
   tbody.innerHTML = rows.map(r => {
