@@ -1062,7 +1062,7 @@ function insertBatchRow(type, desc, rawInv){
       <select class="batch-sel" id="bt_${id}_type">
         <option value="OCF"${type==='OCF'?' selected':''}>OCF</option>
         <option value="TLX"${type==='TLX'?' selected':''}>TLX</option>
-        <option value="IN"${type==='IN'?' selected':''}>IN</option>
+        <option value="BANK_IN"${type==='BANK_IN'?'selected':type==='IN'?' selected':''}>BANK_IN</option>
         <option value="PAYMENT"${type==='PAYMENT'?' selected':''}>PAYMENT</option>
         <option value="OTHER"${type==='OTHER'?' selected':''}>OTHER</option>
       </select>
@@ -1190,7 +1190,7 @@ async function loadStmt(){
   if(!stmtRows.length){ document.getElementById('stmtTbody').innerHTML='<tr><td colspan="9" class="empty">ยังไม่มีข้อมูล</td></tr>'; return; }
   const TYPES = ['OCF','TLX','BANK_IN','PAYMENT','OTHER'];
   document.getElementById('stmtTbody').innerHTML = stmtRows.map(r=>{
-    const badge = r.type==='OCF'?'badge-ocf':r.type==='TLX'?'badge-tlx':r.type==='IN'||r.type==='PAYMENT'?'badge-in':'badge-other';
+    const badge = r.type==='OCF'?'badge-ocf':r.type==='TLX'?'badge-tlx':r.type==='BANK_IN'||r.type==='IN'||r.type==='PAYMENT'?'badge-in':'badge-other';
     const src = '<span style="font-size:9px;color:#cbd5e1;">—</span>';
     const typeOpts = TYPES.map(t=>`<option value="${t}"${r.type===t?' selected':''}>${t}</option>`).join('');
     return `<tr id="stmtrow_${r.id}">
@@ -1304,7 +1304,7 @@ async function stmtSave(id){
   if(error){ showMsg('stmtMsg','❌ '+error.message,'error'); return; }
   showMsg('stmtMsg','✅ บันทึกสำเร็จ','success');
   // อัพเดต view
-  const BADGE = payload.type==='OCF'?'badge-ocf':payload.type==='TLX'?'badge-tlx':payload.type==='PAYMENT'?'badge-in':'badge-other';
+  const BADGE = payload.type==='OCF'?'badge-ocf':payload.type==='TLX'?'badge-tlx':payload.type==='BANK_IN'||payload.type==='IN'||payload.type==='PAYMENT'?'badge-in':'badge-other';
   document.getElementById(`st_no_v_${id}`).textContent  = payload.no||'-';
   document.getElementById(`st_dt_v_${id}`).textContent  = fmDate(payload.txn_date);
   document.getElementById(`st_tp_v_${id}`).innerHTML    = `<span class="badge ${BADGE}">${payload.type}</span>`;
