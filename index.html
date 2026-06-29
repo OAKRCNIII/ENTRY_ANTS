@@ -1522,14 +1522,27 @@ async function discoverVesselsFromPlan(){
 
   const configs = loadSlotConfigs();
   let changed = false;
+
+  // ล้าง draft + config ของ slot ที่เรือ ADD TO DATABASE ไปแล้ว
+  configs.forEach((c, i) => {
+    if(!c || !c.vessel || !c.sailDate) return;
+    const k = c.vessel + '|' + String(c.sailDate||'').substring(0,10);
+    if(shippedSet.has(k)){
+      localStorage.removeItem(getInvKey(i));
+      localStorage.removeItem(getLoyKey(i));
+      configs[i] = {};
+      changed = true;
+    }
+  });
+
   // รีเซ็ต slot ทั้งหมดก่อน แล้วใส่ใหม่จาก DB (เพื่อลบเรือที่ไม่มีข้อมูลออก)
   const newConfigs = Array(SLOT_COUNT).fill(null).map(() => ({}));
   unique.slice(0, SLOT_COUNT).forEach((v, i) => {
     // ถ้า slot เดิมมี localStorage draft → คงชื่อเรือของ slot นั้นไว้ (ผู้ใช้แก้ไขเอง)
     const old = configs[i] || {};
     const hasDraft = loadInvDraft(i).some(r => r.inv);
-    if(hasDraft && old.vessel){
-      newConfigs[i] = old;  // คง config เดิมของ slot ที่มี draft
+    if(hasDraft && old.vessel && !shippedSet.has(old.vessel+'|'+String(old.sailDate||'').substring(0,10))){
+      newConfigs[i] = old;  // คง config เดิมของ slot ที่มี draft (ยังไม่ ship)
     } else {
       newConfigs[i] = { vessel: v.vessel, sailDate: v.sailDate };
       if(old.vessel !== v.vessel || old.sailDate !== v.sailDate) changed = true;
