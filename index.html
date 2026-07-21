@@ -601,7 +601,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
           </div>
         </div>
         <!-- 7 ช่องเอกสาร — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px 14px;margin-bottom:12px;">
+        <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px;max-width:560px;">
           <div class="form-group"><label class="form-label">1. INVOICE</label><input class="form-input" id="docFile_INVOICE" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
           <div class="form-group"><label class="form-label">2. PACKING LIST</label><input class="form-input" id="docFile_PACKING_LIST" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
           <div class="form-group"><label class="form-label">3. B/L</label><input class="form-input" id="docFile_BL" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
@@ -722,16 +722,10 @@ function applyRoleTabs(role){
       btn.style.display='';
     }
   });
-  /* ถ้า role จำกัด tab ให้ active ไปที่ tab แรกที่อนุญาต */
+  /* ถ้า role จำกัด tab ให้ active ไปที่ tab แรกที่อนุญาต (ผ่าน switchTab เพื่อให้ init ของแท็บนั้นทำงาน) */
   if(allowed){
     const firstTab = document.querySelector(`.tab[onclick*="switchTab('${allowed[0]}'"]`);
-    if(firstTab){
-      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-      firstTab.classList.add('active');
-      const tc = document.getElementById('tab-'+allowed[0]);
-      if(tc) tc.classList.add('active');
-    }
+    if(firstTab) switchTab(allowed[0], firstTab);
   }
 }
 
