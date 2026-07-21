@@ -840,15 +840,15 @@ async function loadDocList(){
   cnt.textContent = all.length + ' ไฟล์';
   if(!all.length){ tb.innerHTML='<tr><td colspan="5" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
   const fmSize = n => n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
-  /* หาเวอร์ชันล่าสุดของแต่ละชื่อฐาน (ต่อประเภท) */
+  /* 1 ประเภท = เอกสารเดียว → ตัวล่าสุดของแต่ละประเภทคือฉบับจริง ที่เหลือ = เวอร์ชันเก่า */
   const latest = {};
   all.forEach(f=>{
-    const k = f.dtype+'|'+docBaseName(f.name);
+    const k = f.dtype;
     if(!latest[k] || String(f.created_at) > String(latest[k].created_at)) latest[k] = f;
   });
   tb.innerHTML = all.map(f=>{
     const ico = /\.pdf$/i.test(f.name) ? '📄' : '🖼️';
-    const isOld = latest[f.dtype+'|'+docBaseName(f.name)] !== f;
+    const isOld = latest[f.dtype] !== f;
     const oldTag = isOld ? ' <span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:4px;padding:1px 5px;">🕐 เวอร์ชันเก่า</span>' : '';
     const dt = f.created_at ? new Date(f.created_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-';
     const nameEsc = f.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
