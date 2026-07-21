@@ -852,9 +852,12 @@ async function openDoc(dtype, name){
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 }
 
+const _DOC_DEL_PIN = '625465'; /* รหัสเดียวกับ PIN ยืนยันใน Dashboard หลัก */
 async function deleteDoc(dtype, name){
   const inv = document.getElementById('docInv').value;
-  if(!confirm('ลบไฟล์ "'+name+'" ('+docTypeLabel(dtype)+') ?')) return;
+  const pin = prompt('🔐 ใส่รหัสเพื่อยืนยันการลบไฟล์\n"'+name+'" ('+docTypeLabel(dtype)+')');
+  if(pin === null) return; /* กดยกเลิก */
+  if(pin !== _DOC_DEL_PIN){ alert('❌ รหัสไม่ถูกต้อง — ไม่ได้ลบไฟล์'); return; }
   const {error} = await sb.storage.from('invoice_docs').remove([docSafe(inv)+'/'+dtype+'/'+name]);
   if(error){ alert('ลบไม่สำเร็จ'); return; }
   loadDocList();
