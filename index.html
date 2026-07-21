@@ -686,10 +686,18 @@ const _CREDS = [
   {user:'OAK_THIRA',  hash:'721c73ec8e751ceb16a443083201aa169e37643d6614ce38b391c0968db1b8a8', role:'admin'},
   {user:'YAI_THIRA',  hash:'3c4e528de01db4470664703da16285ddca9df0c04c1239622c1df2735c60199f', role:'transport'},
   {user:'ANTS_THIRA', hash:'13490ad4c4effaac6e9cb6bb07a2b254ebc3f27b5c94bd237448198b7b8fbf34', role:'vessel_manager'},
+  {user:'SU_THIRA',   hash:'61712a2a921078036bdbcd28455bf2417c14ee9ce465a0d1c0027ef488255e09', role:'su_clerk'},
+  {user:'DOC_THIRA',  hash:'63162c7482c634ef500b86969ad61af159550e3c441c0d2d4be44bab08553921', role:'doc_clerk'},
 ];
-/* tabs ที่แต่ละ role มีสิทธิ์เห็น (ไม่ระบุ = เห็นทั้งหมด) */
+/* tabs ที่แต่ละ role มีสิทธิ์เห็น (ไม่ระบุ = เห็นทั้งหมด)
+   1. OAK_THIRA (admin)        → ทุกแท็บ
+   2. SU_THIRA (su_clerk)      → SU Statement เท่านั้น
+   3. ANTS_THIRA (vessel_mgr)  → จัดเรือ + ปฏิทินเรือ
+   4. DOC_THIRA (doc_clerk)    → เอกสาร เท่านั้น */
 const ROLE_TABS = {
+  su_clerk: ['stmt'],
   vessel_manager: ['vessel','cal'],
+  doc_clerk: ['docs'],
 };
 const sb = supabase.createClient(SB_URL, SB_KEY);
 let USER_ROLE = '', LOGGED_USER = '';
