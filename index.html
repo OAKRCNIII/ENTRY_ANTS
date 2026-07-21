@@ -818,6 +818,18 @@ const DOC_TYPES = [
 const docTypeLabel = k => (DOC_TYPES.find(t=>t.key===k)||{}).label||k;
 /* ชื่อฐานของไฟล์ (ตัด ~timestamp ที่ระบบต่อท้ายตอนชื่อซ้ำ) */
 const docBaseName = n => String(n||'').replace(/~\d+(\.[^.]*)$/,'$1').replace(/~\d+$/,'');
+/* Storage ไม่รับชื่อไฟล์ภาษาไทย/อักขระพิเศษ → แปลงเป็นชื่อปลอดภัย
+   ถ้าชื่อเหลือสั้นเกิน (เช่น ไทยล้วน) ใช้ {TYPE}_{วันเวลา} แทน */
+function docFileName(f, dtype){
+  const m = String(f.name).match(/^(.*?)(\.[^.]*)?$/);
+  let base = (m[1]||'').replace(/[^A-Za-z0-9_\-.() ]/g,'').replace(/\s+/g,' ').trim();
+  const ext = (m[2]||'.pdf').replace(/[^A-Za-z0-9.]/g,'').toLowerCase();
+  if(base.replace(/[_\-.() ]/g,'').length < 2){
+    const d=new Date(), p=n=>String(n).padStart(2,'0');
+    base = dtype+'_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
+  }
+  return base + ext;
+}
 
 async function uploadDocs(){
   const inv = document.getElementById('docInv').value.trim();
@@ -844,7 +856,7 @@ async function uploadDocs(){
       );
       for(const f of b.files){
         msg.textContent = `⏳ ${b.label} — กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
-        let name = f.name;
+        let name = docFileName(f, b.dtype);
         if(existing.has(name)){
           const m = name.match(/^(.*?)(\.[^.]*)?$/);
           name = m[1] + '~' + Date.now() + (m[2]||'');
