@@ -796,6 +796,7 @@ async function initDocs(){
     const invRes = await sb.from('invoices').select('invoice_no,created_at')
       .gte('created_at', cutoff).order('id',{ascending:false});
     const list = invRes.data||[];
+    window._docInvSet = new Set(list.map(r=>String(r.invoice_no).trim().toUpperCase()));
     dl.innerHTML = list.map(r=>`<option value="${String(r.invoice_no).replace(/"/g,'&quot;')}"></option>`).join('');
     if(!list.length) document.getElementById('docMsg').textContent = 'ℹ️ ไม่มีอินวอยซ์ใน 30 วันล่าสุด';
   }catch(e){
@@ -819,10 +820,15 @@ const docTypeLabel = k => (DOC_TYPES.find(t=>t.key===k)||{}).label||k;
 const docBaseName = n => String(n||'').replace(/~\d+(\.[^.]*)$/,'$1').replace(/~\d+$/,'');
 
 async function uploadDocs(){
-  const inv = document.getElementById('docInv').value;
+  const inv = document.getElementById('docInv').value.trim();
   const msg = document.getElementById('docMsg');
   const btn = document.getElementById('docUploadBtn');
   if(!inv){ msg.textContent='⚠️ เลือกอินวอยซ์ก่อน'; msg.style.color='#b45309'; return; }
+  /* ต้องตรงกับรายการจริง — กันพิมพ์ผิดแล้วไฟล์หลุดไปโฟลเดอร์ผิด */
+  if(window._docInvSet && !window._docInvSet.has(inv.toUpperCase())){
+    msg.textContent='⚠️ อินวอยซ์ "'+inv+'" ไม่อยู่ในรายการ — กรุณาเลือกจากรายการที่เด้งขึ้นมา';
+    msg.style.color='#b45309'; return;
+  }
   /* รวมไฟล์จากทุกช่อง */
   const batches = DOC_TYPES
     .map(t=>({dtype:t.key, label:t.label, files:[...(document.getElementById('docFile_'+t.key).files||[])]}))
@@ -830,34 +836,41 @@ async function uploadDocs(){
   if(!batches.length){ msg.textContent='⚠️ ยังไม่ได้แนบไฟล์ในช่องไหนเลย'; msg.style.color='#b45309'; return; }
   btn.disabled = true;
   let ok=0, fail=0;
-  for(const b of batches){
-    /* ชื่อซ้ำ → ไม่ทับ แต่ต่อท้าย ~timestamp เก็บเป็นเวอร์ชันใหม่ (Dashboard โชว์เฉพาะล่าสุด) */
-    const existing = new Set(
-      ((await sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+b.dtype,{limit:200})).data||[]).map(x=>x.name)
-    );
-    for(const f of b.files){
-      msg.textContent = `⏳ ${b.label} — กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
-      let name = f.name;
-      if(existing.has(name)){
-        const m = name.match(/^(.*?)(\.[^.]*)?$/);
-        name = m[1] + '~' + Date.now() + (m[2]||'');
-      }
-      existing.add(name);
-      const path = docSafe(inv) + '/' + b.dtype + '/' + name;
-      const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:false, contentType:f.type||'application/octet-stream'});
-      if(error){ fail++; console.error('upload', name, error); }
-      else{
-        ok++;
-        sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:b.dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'upload'}).then(()=>{});
+  try{
+    for(const b of batches){
+      /* ชื่อซ้ำ → ไม่ทับ แต่ต่อท้าย ~timestamp เก็บเป็นเวอร์ชันใหม่ (Dashboard โชว์เฉพาะล่าสุด) */
+      const existing = new Set(
+        ((await sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+b.dtype,{limit:200})).data||[]).map(x=>x.name)
+      );
+      for(const f of b.files){
+        msg.textContent = `⏳ ${b.label} — กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
+        let name = f.name;
+        if(existing.has(name)){
+          const m = name.match(/^(.*?)(\.[^.]*)?$/);
+          name = m[1] + '~' + Date.now() + (m[2]||'');
+        }
+        existing.add(name);
+        const path = docSafe(inv) + '/' + b.dtype + '/' + name;
+        const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:false, contentType:f.type||'application/octet-stream'});
+        if(error){ fail++; console.error('upload', name, error); }
+        else{
+          ok++;
+          sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:b.dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'upload'}).then(()=>{});
+        }
       }
     }
+    msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์ — ลองกดอัพโหลดอีกครั้ง` : `✅ อัพโหลดสำเร็จ ${ok} ไฟล์ (${batches.length} ประเภท)`;
+    msg.style.color = fail ? '#b45309' : '#15803d';
+    if(!fail) DOC_TYPES.forEach(t=>{ document.getElementById('docFile_'+t.key).value=''; });
+  }catch(e){
+    console.error('uploadDocs', e);
+    msg.textContent = '⚠️ อัพโหลดสะดุด ('+(ok)+' ไฟล์สำเร็จ) — เช็คเน็ตแล้วกดอัพโหลดอีกครั้ง';
+    msg.style.color = '#b45309';
+  }finally{
+    btn.disabled = false;
+    loadDocList();
+    loadDocHistory();
   }
-  btn.disabled = false;
-  msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์` : `✅ อัพโหลดสำเร็จ ${ok} ไฟล์ (${batches.length} ประเภท)`;
-  msg.style.color = fail ? '#b45309' : '#15803d';
-  DOC_TYPES.forEach(t=>{ document.getElementById('docFile_'+t.key).value=''; });
-  loadDocList();
-  loadDocHistory();
 }
 
 async function loadDocList(){
