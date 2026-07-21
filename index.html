@@ -599,12 +599,25 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
             <input class="form-input" id="docInv" list="docInvList" placeholder="พิมพ์หรือเลือกอินวอยซ์..." onchange="loadDocList()" style="width:100%;" autocomplete="off">
             <datalist id="docInvList"></datalist>
           </div>
+          <div class="form-group" style="width:190px;flex-shrink:0;">
+            <label class="form-label">ประเภทเอกสาร</label>
+            <select class="form-select" id="docType" style="width:100%;">
+              <option value="INVOICE">1. INVOICE</option>
+              <option value="PACKING_LIST">2. PACKING LIST</option>
+              <option value="BL">3. B/L</option>
+              <option value="CO">4. C/O</option>
+              <option value="PHYTO">5. PHYTO</option>
+              <option value="IPPC">6. IPPC</option>
+              <option value="MOSQUITO">7. ใบฉีดยุง</option>
+            </select>
+          </div>
           <div class="form-group" style="flex:1;min-width:240px;">
             <label class="form-label">ไฟล์ (PDF / รูปภาพ · สูงสุด 10MB/ไฟล์)</label>
             <input class="form-input" id="docFiles" type="file" accept="application/pdf,image/*" multiple style="padding:7px;">
           </div>
           <button class="btn btn-primary" id="docUploadBtn" style="flex-shrink:0;" onclick="uploadDocs()">⬆️ อัพโหลด</button>
         </div>
+        <div id="docChecklist" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
         <div class="form-msg" id="docMsg"></div>
       </div>
       <div class="table-card">
@@ -616,6 +629,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
           <table class="data-tbl">
             <thead>
               <tr>
+                <th style="width:130px;">ประเภท</th>
                 <th>ไฟล์</th>
                 <th style="width:110px;">ขนาด</th>
                 <th style="width:150px;">อัพโหลดเมื่อ</th>
@@ -623,7 +637,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
               </tr>
             </thead>
             <tbody id="docTbody">
-              <tr><td colspan="4" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>
+              <tr><td colspan="5" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>
             </tbody>
           </table>
         </div>
@@ -758,8 +772,21 @@ async function initDocs(){
   }
 }
 
+/* ประเภทเอกสาร 7 ชนิด — เก็บแยกโฟลเดอร์: {inv}/{TYPE}/{filename} */
+const DOC_TYPES = [
+  {key:'INVOICE',      label:'INVOICE'},
+  {key:'PACKING_LIST', label:'PACKING LIST'},
+  {key:'BL',           label:'B/L'},
+  {key:'CO',           label:'C/O'},
+  {key:'PHYTO',        label:'PHYTO'},
+  {key:'IPPC',         label:'IPPC'},
+  {key:'MOSQUITO',     label:'ใบฉีดยุง'},
+];
+const docTypeLabel = k => (DOC_TYPES.find(t=>t.key===k)||{}).label||k;
+
 async function uploadDocs(){
   const inv = document.getElementById('docInv').value;
+  const dtype = document.getElementById('docType').value;
   const files = document.getElementById('docFiles').files;
   const msg = document.getElementById('docMsg');
   const btn = document.getElementById('docUploadBtn');
@@ -769,12 +796,12 @@ async function uploadDocs(){
   let ok=0, fail=0;
   for(const f of files){
     msg.textContent = `⏳ กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
-    const path = docSafe(inv) + '/' + f.name;
+    const path = docSafe(inv) + '/' + dtype + '/' + f.name;
     const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:true, contentType:f.type||'application/octet-stream'});
     if(error){ fail++; console.error('upload', f.name, error); } else ok++;
   }
   btn.disabled = false;
-  msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์` : `✅ อัพโหลดสำเร็จ ${ok} ไฟล์`;
+  msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์` : `✅ อัพโหลด ${docTypeLabel(dtype)} สำเร็จ ${ok} ไฟล์`;
   msg.style.color = fail ? '#b45309' : '#15803d';
   document.getElementById('docFiles').value = '';
   loadDocList();
@@ -784,41 +811,51 @@ async function loadDocList(){
   const inv = document.getElementById('docInv').value;
   const tb = document.getElementById('docTbody');
   const cnt = document.getElementById('docCount');
-  if(!inv){ tb.innerHTML='<tr><td colspan="4" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>'; cnt.textContent='—'; return; }
-  tb.innerHTML='<tr><td colspan="4" class="loading">⏳ กำลังโหลด...</td></tr>';
-  const {data, error} = await sb.storage.from('invoice_docs').list(docSafe(inv), {limit:100, sortBy:{column:'created_at', order:'desc'}});
-  if(error){ tb.innerHTML='<tr><td colspan="4" class="empty" style="padding:18px;color:#b91c1c;">โหลดไม่สำเร็จ</td></tr>'; cnt.textContent='—'; return; }
-  const files = (data||[]).filter(f=>f.name && !f.name.startsWith('.'));
-  cnt.textContent = files.length + ' ไฟล์';
-  if(!files.length){ tb.innerHTML='<tr><td colspan="4" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
+  const chk = document.getElementById('docChecklist');
+  if(!inv){ tb.innerHTML='<tr><td colspan="5" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>'; cnt.textContent='—'; chk.innerHTML=''; return; }
+  tb.innerHTML='<tr><td colspan="5" class="loading">⏳ กำลังโหลด...</td></tr>';
+  /* list ทุกประเภทพร้อมกัน */
+  const results = await Promise.all(DOC_TYPES.map(t=>
+    sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+t.key, {limit:100, sortBy:{column:'created_at', order:'desc'}})
+      .then(r=>({type:t.key, files:(r.data||[]).filter(f=>f.name && !f.name.startsWith('.'))}))
+  ));
+  const all = results.flatMap(r=>r.files.map(f=>({...f, dtype:r.type})));
+  /* checklist ครบ/ขาด */
+  chk.innerHTML = DOC_TYPES.map(t=>{
+    const has = results.find(r=>r.type===t.key).files.length>0;
+    return `<span style="font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:12px;${has?'background:#dcfce7;color:#166534;border:1px solid #86efac;':'background:#f1f5f9;color:#94a3b8;border:1px dashed #cbd5e0;'}">${has?'✓':'○'} ${t.label}</span>`;
+  }).join('');
+  cnt.textContent = all.length + ' ไฟล์';
+  if(!all.length){ tb.innerHTML='<tr><td colspan="5" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
   const fmSize = n => n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
-  tb.innerHTML = files.map(f=>{
+  tb.innerHTML = all.map(f=>{
     const ico = /\.pdf$/i.test(f.name) ? '📄' : '🖼️';
     const dt = f.created_at ? new Date(f.created_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-';
     const nameEsc = f.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
     return `<tr>
+      <td><span style="font-size:10px;font-weight:800;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;white-space:nowrap;">${docTypeLabel(f.dtype)}</span></td>
       <td>${ico} ${f.name}</td>
       <td>${f.metadata&&f.metadata.size?fmSize(f.metadata.size):'-'}</td>
       <td>${dt}</td>
       <td style="white-space:nowrap;">
-        <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${nameEsc}')">⬇️ เปิด/โหลด</button>
-        <button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${nameEsc}')">🗑️</button>
+        <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${f.dtype}','${nameEsc}')">⬇️ เปิด/โหลด</button>
+        <button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${f.dtype}','${nameEsc}')">🗑️</button>
       </td>
     </tr>`;
   }).join('');
 }
 
-async function openDoc(name){
+async function openDoc(dtype, name){
   const inv = document.getElementById('docInv').value;
-  const {data, error} = await sb.storage.from('invoice_docs').createSignedUrl(docSafe(inv)+'/'+name, 3600);
+  const {data, error} = await sb.storage.from('invoice_docs').createSignedUrl(docSafe(inv)+'/'+dtype+'/'+name, 3600);
   if(error||!data){ alert('เปิดไฟล์ไม่สำเร็จ'); return; }
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 }
 
-async function deleteDoc(name){
+async function deleteDoc(dtype, name){
   const inv = document.getElementById('docInv').value;
-  if(!confirm('ลบไฟล์ "'+name+'" ?')) return;
-  const {error} = await sb.storage.from('invoice_docs').remove([docSafe(inv)+'/'+name]);
+  if(!confirm('ลบไฟล์ "'+name+'" ('+docTypeLabel(dtype)+') ?')) return;
+  const {error} = await sb.storage.from('invoice_docs').remove([docSafe(inv)+'/'+dtype+'/'+name]);
   if(error){ alert('ลบไม่สำเร็จ'); return; }
   loadDocList();
 }
