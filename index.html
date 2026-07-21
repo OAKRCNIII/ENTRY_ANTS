@@ -633,13 +633,45 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                 <th>ไฟล์</th>
                 <th style="width:110px;">ขนาด</th>
                 <th style="width:150px;">อัพโหลดเมื่อ</th>
+                <th style="width:110px;">ผู้อัพโหลด</th>
                 <th style="width:170px;"></th>
               </tr>
             </thead>
             <tbody id="docTbody">
-              <tr><td colspan="5" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>
+              <tr><td colspan="6" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- ประวัติการอัพโหลด -->
+      <div class="table-card" style="margin-top:14px;">
+        <div class="table-header">
+          <span class="table-title">🕘 ประวัติการอัพโหลดเอกสาร</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input class="form-input" id="docHistSearch" type="text" placeholder="🔍 กรอง invoice / ผู้ใช้ / ไฟล์..." style="width:220px;padding:6px 10px;font-size:12px;" oninput="renderDocHistory()">
+            <span class="table-count" id="docHistCount">—</span>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="data-tbl">
+            <thead>
+              <tr>
+                <th style="width:150px;">เวลา</th>
+                <th style="width:110px;">ผู้ใช้</th>
+                <th style="width:90px;">การกระทำ</th>
+                <th style="width:160px;">อินวอยซ์</th>
+                <th style="width:130px;">ประเภท</th>
+                <th>ไฟล์</th>
+              </tr>
+            </thead>
+            <tbody id="docHistBody">
+              <tr><td colspan="6" class="loading">⏳ กำลังโหลด...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:10px 14px;">
+          <button class="btn btn-secondary" style="font-size:12px;" onclick="loadDocHistory(true)">⬇️ โหลดเพิ่ม 300 รายการ</button>
         </div>
       </div>
     </div><!-- /tab-docs -->
@@ -770,6 +802,7 @@ async function initDocs(){
   }catch(e){
     document.getElementById('docMsg').textContent = '⚠️ โหลดรายชื่ออินวอยซ์ไม่สำเร็จ';
   }
+  loadDocHistory();
 }
 
 /* ประเภทเอกสาร 7 ชนิด — เก็บแยกโฟลเดอร์: {inv}/{TYPE}/{filename} */
@@ -810,13 +843,19 @@ async function uploadDocs(){
     existing.add(name);
     const path = docSafe(inv) + '/' + dtype + '/' + name;
     const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:false, contentType:f.type||'application/octet-stream'});
-    if(error){ fail++; console.error('upload', name, error); } else ok++;
+    if(error){ fail++; console.error('upload', name, error); }
+    else{
+      ok++;
+      /* บันทึกประวัติ */
+      sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'upload'}).then(()=>{});
+    }
   }
   btn.disabled = false;
   msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์` : `✅ อัพโหลด ${docTypeLabel(dtype)} สำเร็จ ${ok} ไฟล์`;
   msg.style.color = fail ? '#b45309' : '#15803d';
   document.getElementById('docFiles').value = '';
   loadDocList();
+  loadDocHistory();
 }
 
 async function loadDocList(){
@@ -824,13 +863,18 @@ async function loadDocList(){
   const tb = document.getElementById('docTbody');
   const cnt = document.getElementById('docCount');
   const chk = document.getElementById('docChecklist');
-  if(!inv){ tb.innerHTML='<tr><td colspan="5" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>'; cnt.textContent='—'; chk.innerHTML=''; return; }
-  tb.innerHTML='<tr><td colspan="5" class="loading">⏳ กำลังโหลด...</td></tr>';
-  /* list ทุกประเภทพร้อมกัน */
-  const results = await Promise.all(DOC_TYPES.map(t=>
-    sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+t.key, {limit:100, sortBy:{column:'created_at', order:'desc'}})
-      .then(r=>({type:t.key, files:(r.data||[]).filter(f=>f.name && !f.name.startsWith('.'))}))
-  ));
+  if(!inv){ tb.innerHTML='<tr><td colspan="6" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>'; cnt.textContent='—'; chk.innerHTML=''; return; }
+  tb.innerHTML='<tr><td colspan="6" class="loading">⏳ กำลังโหลด...</td></tr>';
+  /* list ทุกประเภทพร้อมกัน + ดึงชื่อผู้อัพโหลดจาก log */
+  const [results, logRes] = await Promise.all([
+    Promise.all(DOC_TYPES.map(t=>
+      sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+t.key, {limit:100, sortBy:{column:'created_at', order:'desc'}})
+        .then(r=>({type:t.key, files:(r.data||[]).filter(f=>f.name && !f.name.startsWith('.'))}))
+    )),
+    sb.from('doc_upload_log').select('doc_type,file_name,uploaded_by').eq('invoice_no',inv).eq('action','upload').order('id',{ascending:false}).limit(500).then(r=>r.data||[], ()=>[])
+  ]);
+  const uploaderMap = {};
+  logRes.forEach(l=>{ const k=l.doc_type+'|'+l.file_name; if(!(k in uploaderMap)) uploaderMap[k]=l.uploaded_by; });
   const all = results.flatMap(r=>r.files.map(f=>({...f, dtype:r.type})));
   /* checklist ครบ/ขาด */
   chk.innerHTML = DOC_TYPES.map(t=>{
@@ -838,7 +882,7 @@ async function loadDocList(){
     return `<span style="font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:12px;${has?'background:#dcfce7;color:#166534;border:1px solid #86efac;':'background:#f1f5f9;color:#94a3b8;border:1px dashed #cbd5e0;'}">${has?'✓':'○'} ${t.label}</span>`;
   }).join('');
   cnt.textContent = all.length + ' ไฟล์';
-  if(!all.length){ tb.innerHTML='<tr><td colspan="5" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
+  if(!all.length){ tb.innerHTML='<tr><td colspan="6" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
   const fmSize = n => n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
   /* 1 ประเภท = เอกสารเดียว → ตัวล่าสุดของแต่ละประเภทคือฉบับจริง ที่เหลือ = เวอร์ชันเก่า */
   const latest = {};
@@ -857,6 +901,7 @@ async function loadDocList(){
       <td>${ico} ${f.name}${oldTag}</td>
       <td>${f.metadata&&f.metadata.size?fmSize(f.metadata.size):'-'}</td>
       <td>${dt}</td>
+      <td><span style="font-size:11px;font-weight:700;color:#0e7490;">👤 ${uploaderMap[f.dtype+'|'+f.name]||'-'}</span></td>
       <td style="white-space:nowrap;">
         <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${f.dtype}','${nameEsc}')">⬇️ เปิด/โหลด</button>
         <button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${f.dtype}','${nameEsc}')">🗑️</button>
@@ -880,7 +925,51 @@ async function deleteDoc(dtype, name){
   if(pin !== _DOC_DEL_PIN){ alert('❌ รหัสไม่ถูกต้อง — ไม่ได้ลบไฟล์'); return; }
   const {error} = await sb.storage.from('invoice_docs').remove([docSafe(inv)+'/'+dtype+'/'+name]);
   if(error){ alert('ลบไม่สำเร็จ'); return; }
+  sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'delete'}).then(()=>{});
   loadDocList();
+  loadDocHistory();
+}
+
+/* ── ประวัติการอัพโหลด ── */
+let _docHist = [], _docHistDone = false;
+async function loadDocHistory(more){
+  const body = document.getElementById('docHistBody');
+  if(!more){ _docHist=[]; _docHistDone=false; }
+  if(_docHistDone) return;
+  const PAGE = 300;
+  const {data, error} = await sb.from('doc_upload_log').select('*')
+    .order('id',{ascending:false}).range(_docHist.length, _docHist.length+PAGE-1);
+  if(error){ body.innerHTML='<tr><td colspan="6" class="empty" style="padding:18px;color:#b91c1c;">โหลดประวัติไม่สำเร็จ — ตาราง doc_upload_log อาจยังไม่ถูกสร้าง</td></tr>'; return; }
+  _docHist.push(...(data||[]));
+  if((data||[]).length < PAGE) _docHistDone = true;
+  renderDocHistory();
+}
+function renderDocHistory(){
+  const body = document.getElementById('docHistBody');
+  const cnt = document.getElementById('docHistCount');
+  const q = (document.getElementById('docHistSearch').value||'').trim().toLowerCase();
+  const rows = q ? _docHist.filter(r=>
+    String(r.invoice_no).toLowerCase().includes(q) ||
+    String(r.uploaded_by).toLowerCase().includes(q) ||
+    String(r.file_name).toLowerCase().includes(q) ||
+    docTypeLabel(r.doc_type).toLowerCase().includes(q)
+  ) : _docHist;
+  cnt.textContent = rows.length + (_docHistDone ? ' รายการ' : '+ รายการ');
+  if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="empty" style="padding:18px;">ไม่มีประวัติ</td></tr>'; return; }
+  body.innerHTML = rows.map(r=>{
+    const dt = r.created_at ? new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-';
+    const act = r.action==='delete'
+      ? '<span style="font-size:10px;font-weight:800;background:#fee2e2;color:#b91c1c;border-radius:5px;padding:2px 8px;">🗑️ ลบ</span>'
+      : '<span style="font-size:10px;font-weight:800;background:#dcfce7;color:#166534;border-radius:5px;padding:2px 8px;">⬆️ อัพโหลด</span>';
+    return `<tr>
+      <td style="font-size:11.5px;color:#64748b;">${dt}</td>
+      <td style="font-weight:700;color:#0e7490;">👤 ${r.uploaded_by}</td>
+      <td>${act}</td>
+      <td style="font-weight:700;">${r.invoice_no}</td>
+      <td><span style="font-size:10px;font-weight:800;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;">${docTypeLabel(r.doc_type)}</span></td>
+      <td style="font-size:11.5px;">${r.file_name}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════════
