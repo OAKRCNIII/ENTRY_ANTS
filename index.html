@@ -599,23 +599,20 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
             <input class="form-input" id="docInv" list="docInvList" placeholder="พิมพ์หรือเลือกอินวอยซ์..." onchange="loadDocList()" style="width:100%;" autocomplete="off">
             <datalist id="docInvList"></datalist>
           </div>
-          <div class="form-group" style="width:190px;flex-shrink:0;">
-            <label class="form-label">ประเภทเอกสาร</label>
-            <select class="form-select" id="docType" style="width:100%;">
-              <option value="INVOICE">1. INVOICE</option>
-              <option value="PACKING_LIST">2. PACKING LIST</option>
-              <option value="BL">3. B/L</option>
-              <option value="CO">4. C/O</option>
-              <option value="PHYTO">5. PHYTO</option>
-              <option value="IPPC">6. IPPC</option>
-              <option value="MOSQUITO">7. ใบฉีดยุง</option>
-            </select>
-          </div>
-          <div class="form-group" style="flex:1;min-width:240px;">
-            <label class="form-label">ไฟล์ (PDF / รูปภาพ · สูงสุด 10MB/ไฟล์)</label>
-            <input class="form-input" id="docFiles" type="file" accept="application/pdf,image/*" multiple style="padding:7px;">
-          </div>
-          <button class="btn btn-primary" id="docUploadBtn" style="flex-shrink:0;" onclick="uploadDocs()">⬆️ อัพโหลด</button>
+        </div>
+        <!-- 7 ช่องเอกสาร — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px 14px;margin-bottom:12px;">
+          <div class="form-group"><label class="form-label">1. INVOICE</label><input class="form-input" id="docFile_INVOICE" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
+          <div class="form-group"><label class="form-label">2. PACKING LIST</label><input class="form-input" id="docFile_PACKING_LIST" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
+          <div class="form-group"><label class="form-label">3. B/L</label><input class="form-input" id="docFile_BL" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
+          <div class="form-group"><label class="form-label">4. C/O</label><input class="form-input" id="docFile_CO" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
+          <div class="form-group"><label class="form-label">5. PHYTO</label><input class="form-input" id="docFile_PHYTO" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
+          <div class="form-group"><label class="form-label">6. IPPC</label><input class="form-input" id="docFile_IPPC" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
+          <div class="form-group"><label class="form-label">7. ใบฉีดยุง</label><input class="form-input" id="docFile_MOSQUITO" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+          <button class="btn btn-primary" id="docUploadBtn" onclick="uploadDocs()">⬆️ อัพโหลดทั้งหมด</button>
+          <span style="font-size:10.5px;color:#94a3b8;">PDF / รูปภาพ · สูงสุด 10MB/ไฟล์ · แนบกี่ช่องก็ได้แล้วกดปุ่มเดียว</span>
         </div>
         <div id="docChecklist" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
         <div class="form-msg" id="docMsg"></div>
@@ -821,39 +818,42 @@ const docBaseName = n => String(n||'').replace(/~\d+(\.[^.]*)$/,'$1').replace(/~
 
 async function uploadDocs(){
   const inv = document.getElementById('docInv').value;
-  const dtype = document.getElementById('docType').value;
-  const files = document.getElementById('docFiles').files;
   const msg = document.getElementById('docMsg');
   const btn = document.getElementById('docUploadBtn');
   if(!inv){ msg.textContent='⚠️ เลือกอินวอยซ์ก่อน'; msg.style.color='#b45309'; return; }
-  if(!files.length){ msg.textContent='⚠️ เลือกไฟล์ก่อน'; msg.style.color='#b45309'; return; }
+  /* รวมไฟล์จากทุกช่อง */
+  const batches = DOC_TYPES
+    .map(t=>({dtype:t.key, label:t.label, files:[...(document.getElementById('docFile_'+t.key).files||[])]}))
+    .filter(b=>b.files.length);
+  if(!batches.length){ msg.textContent='⚠️ ยังไม่ได้แนบไฟล์ในช่องไหนเลย'; msg.style.color='#b45309'; return; }
   btn.disabled = true;
   let ok=0, fail=0;
-  /* ชื่อซ้ำ → ไม่ทับ แต่ต่อท้าย ~timestamp เก็บเป็นเวอร์ชันใหม่ (Dashboard โชว์เฉพาะล่าสุด) */
-  const existing = new Set(
-    ((await sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+dtype,{limit:200})).data||[]).map(x=>x.name)
-  );
-  for(const f of files){
-    msg.textContent = `⏳ กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
-    let name = f.name;
-    if(existing.has(name)){
-      const m = name.match(/^(.*?)(\.[^.]*)?$/);
-      name = m[1] + '~' + Date.now() + (m[2]||'');
-    }
-    existing.add(name);
-    const path = docSafe(inv) + '/' + dtype + '/' + name;
-    const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:false, contentType:f.type||'application/octet-stream'});
-    if(error){ fail++; console.error('upload', name, error); }
-    else{
-      ok++;
-      /* บันทึกประวัติ */
-      sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'upload'}).then(()=>{});
+  for(const b of batches){
+    /* ชื่อซ้ำ → ไม่ทับ แต่ต่อท้าย ~timestamp เก็บเป็นเวอร์ชันใหม่ (Dashboard โชว์เฉพาะล่าสุด) */
+    const existing = new Set(
+      ((await sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+b.dtype,{limit:200})).data||[]).map(x=>x.name)
+    );
+    for(const f of b.files){
+      msg.textContent = `⏳ ${b.label} — กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
+      let name = f.name;
+      if(existing.has(name)){
+        const m = name.match(/^(.*?)(\.[^.]*)?$/);
+        name = m[1] + '~' + Date.now() + (m[2]||'');
+      }
+      existing.add(name);
+      const path = docSafe(inv) + '/' + b.dtype + '/' + name;
+      const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:false, contentType:f.type||'application/octet-stream'});
+      if(error){ fail++; console.error('upload', name, error); }
+      else{
+        ok++;
+        sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:b.dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'upload'}).then(()=>{});
+      }
     }
   }
   btn.disabled = false;
-  msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์` : `✅ อัพโหลด ${docTypeLabel(dtype)} สำเร็จ ${ok} ไฟล์`;
+  msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์` : `✅ อัพโหลดสำเร็จ ${ok} ไฟล์ (${batches.length} ประเภท)`;
   msg.style.color = fail ? '#b45309' : '#15803d';
-  document.getElementById('docFiles').value = '';
+  DOC_TYPES.forEach(t=>{ document.getElementById('docFile_'+t.key).value=''; });
   loadDocList();
   loadDocHistory();
 }
