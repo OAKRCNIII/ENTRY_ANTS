@@ -313,6 +313,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
     <button class="tab" onclick="switchTab('vessel',this)">🚢 จัดเรือ</button>
     <button class="tab" onclick="switchTab('cal',this)">📅 ปฏิทินเรือ</button>
     <button class="tab" onclick="switchTab('dbvessel',this)">📦 DATABASE เรือ</button>
+    <button class="tab" onclick="switchTab('docs',this)">📎 เอกสาร</button>
   </div>
 
   <!-- MAIN -->
@@ -586,6 +587,50 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
       </div>
     </div><!-- /tab-dbvessel -->
 
+    <!-- ══════════════════════════════
+         TAB: DOCS — อัพโหลดเอกสารคู่อินวอยซ์
+    ══════════════════════════════ -->
+    <div class="tab-content" id="tab-docs">
+      <div class="form-card">
+        <div class="section-title">📎 อัพโหลดเอกสารคู่อินวอยซ์</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+          <div class="form-group" style="flex:1;min-width:240px;">
+            <label class="form-label">อินวอยซ์ (เฉพาะเรือยังไม่ออก)</label>
+            <select class="form-select" id="docInv" onchange="loadDocList()" style="width:100%;">
+              <option value="">— กำลังโหลด... —</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:240px;">
+            <label class="form-label">ไฟล์ (PDF / รูปภาพ · สูงสุด 10MB/ไฟล์)</label>
+            <input class="form-input" id="docFiles" type="file" accept="application/pdf,image/*" multiple style="padding:7px;">
+          </div>
+          <button class="btn btn-primary" id="docUploadBtn" style="flex-shrink:0;" onclick="uploadDocs()">⬆️ อัพโหลด</button>
+        </div>
+        <div class="form-msg" id="docMsg"></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">📂 เอกสารของอินวอยซ์นี้</span>
+          <span class="table-count" id="docCount">—</span>
+        </div>
+        <div class="tbl-wrap">
+          <table class="data-tbl">
+            <thead>
+              <tr>
+                <th>ไฟล์</th>
+                <th style="width:110px;">ขนาด</th>
+                <th style="width:150px;">อัพโหลดเมื่อ</th>
+                <th style="width:170px;"></th>
+              </tr>
+            </thead>
+            <tbody id="docTbody">
+              <tr><td colspan="4" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div><!-- /tab-docs -->
+
   </div><!-- /main -->
 </div><!-- /app -->
 
@@ -687,6 +732,103 @@ function switchTab(name, el){
   document.getElementById('tab-'+name).classList.add('active');
   if(name === 'dbvessel') loadDbVessel();
   if(name === 'cal') initCal();
+  if(name === 'docs') initDocs();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DOCS — อัพโหลดเอกสารคู่อินวอยซ์ (Supabase Storage: invoice_docs)
+// ═══════════════════════════════════════════════════════════
+let _docsInit = false;
+const docSafe = inv => String(inv||'').trim().replace(/[\/\\#?%]/g,'_');
+const _docNorm = s => String(s||'').toUpperCase().replace(/\s+/g,'');
+
+async function initDocs(){
+  if(_docsInit) return;
+  _docsInit = true;
+  const sel = document.getElementById('docInv');
+  try{
+    const today = new Date(); today.setHours(0,0,0,0);
+    const [invRes, vslRes] = await Promise.all([
+      sb.from('invoices').select('invoice_no').order('id',{ascending:false}),
+      sb.from('vessels').select('invoice_no,sail_date'),
+    ]);
+    const departed = new Set();
+    (vslRes.data||[]).forEach(v=>{
+      if(!v.sail_date) return;
+      const d = new Date(v.sail_date);
+      if(!isNaN(d) && d < today) departed.add(_docNorm(v.invoice_no));
+    });
+    const list = (invRes.data||[]).filter(r=>!departed.has(_docNorm(r.invoice_no)));
+    sel.innerHTML = '<option value="">— เลือกอินวอยซ์ —</option>' +
+      list.map(r=>`<option value="${String(r.invoice_no).replace(/"/g,'&quot;')}">${r.invoice_no}</option>`).join('');
+  }catch(e){
+    sel.innerHTML = '<option value="">โหลดรายชื่ออินวอยซ์ไม่สำเร็จ</option>';
+  }
+}
+
+async function uploadDocs(){
+  const inv = document.getElementById('docInv').value;
+  const files = document.getElementById('docFiles').files;
+  const msg = document.getElementById('docMsg');
+  const btn = document.getElementById('docUploadBtn');
+  if(!inv){ msg.textContent='⚠️ เลือกอินวอยซ์ก่อน'; msg.style.color='#b45309'; return; }
+  if(!files.length){ msg.textContent='⚠️ เลือกไฟล์ก่อน'; msg.style.color='#b45309'; return; }
+  btn.disabled = true;
+  let ok=0, fail=0;
+  for(const f of files){
+    msg.textContent = `⏳ กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
+    const path = docSafe(inv) + '/' + f.name;
+    const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:true, contentType:f.type||'application/octet-stream'});
+    if(error){ fail++; console.error('upload', f.name, error); } else ok++;
+  }
+  btn.disabled = false;
+  msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์` : `✅ อัพโหลดสำเร็จ ${ok} ไฟล์`;
+  msg.style.color = fail ? '#b45309' : '#15803d';
+  document.getElementById('docFiles').value = '';
+  loadDocList();
+}
+
+async function loadDocList(){
+  const inv = document.getElementById('docInv').value;
+  const tb = document.getElementById('docTbody');
+  const cnt = document.getElementById('docCount');
+  if(!inv){ tb.innerHTML='<tr><td colspan="4" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>'; cnt.textContent='—'; return; }
+  tb.innerHTML='<tr><td colspan="4" class="loading">⏳ กำลังโหลด...</td></tr>';
+  const {data, error} = await sb.storage.from('invoice_docs').list(docSafe(inv), {limit:100, sortBy:{column:'created_at', order:'desc'}});
+  if(error){ tb.innerHTML='<tr><td colspan="4" class="empty" style="padding:18px;color:#b91c1c;">โหลดไม่สำเร็จ</td></tr>'; cnt.textContent='—'; return; }
+  const files = (data||[]).filter(f=>f.name && !f.name.startsWith('.'));
+  cnt.textContent = files.length + ' ไฟล์';
+  if(!files.length){ tb.innerHTML='<tr><td colspan="4" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
+  const fmSize = n => n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
+  tb.innerHTML = files.map(f=>{
+    const ico = /\.pdf$/i.test(f.name) ? '📄' : '🖼️';
+    const dt = f.created_at ? new Date(f.created_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-';
+    const nameEsc = f.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    return `<tr>
+      <td>${ico} ${f.name}</td>
+      <td>${f.metadata&&f.metadata.size?fmSize(f.metadata.size):'-'}</td>
+      <td>${dt}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${nameEsc}')">⬇️ เปิด/โหลด</button>
+        <button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${nameEsc}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function openDoc(name){
+  const inv = document.getElementById('docInv').value;
+  const {data, error} = await sb.storage.from('invoice_docs').createSignedUrl(docSafe(inv)+'/'+name, 3600);
+  if(error||!data){ alert('เปิดไฟล์ไม่สำเร็จ'); return; }
+  window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+}
+
+async function deleteDoc(name){
+  const inv = document.getElementById('docInv').value;
+  if(!confirm('ลบไฟล์ "'+name+'" ?')) return;
+  const {error} = await sb.storage.from('invoice_docs').remove([docSafe(inv)+'/'+name]);
+  if(error){ alert('ลบไม่สำเร็จ'); return; }
+  loadDocList();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1339,7 +1481,7 @@ const SLOTS_KEY  = 'ants_vessel_slots_v2';
 const SLOT_COUNT = 10;
 const INV_ROWS   = 20;   // แถวซ้าย (invoice)
 const LOY_ROWS   = 12;   // แถวขวา (ลอย)
-const DEST_LIST  = ['NANSHA','SHANGHAI','NINGBO','QINGDAO','TIANJIN','GUANGZHOU','JIUJIANG ,JIANGXI PORT','HAMBURG','VLADIVOSTOK','JAKARTA, INDONESIA','CAT LAI'];
+const DEST_LIST  = ['NANSHA','SHANGHAI','NINGBO','QINGDAO','TIANJIN','GUANGZHOU','SHUNDE NEW PORT','JIUJIANG ,JIANGXI PORT','HAMBURG','VLADIVOSTOK','JAKARTA, INDONESIA','CAT LAI'];
 
 let currentVslIdx = 0;
 
