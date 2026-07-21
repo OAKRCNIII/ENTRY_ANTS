@@ -783,6 +783,8 @@ const DOC_TYPES = [
   {key:'MOSQUITO',     label:'ใบฉีดยุง'},
 ];
 const docTypeLabel = k => (DOC_TYPES.find(t=>t.key===k)||{}).label||k;
+/* ชื่อฐานของไฟล์ (ตัด ~timestamp ที่ระบบต่อท้ายตอนชื่อซ้ำ) */
+const docBaseName = n => String(n||'').replace(/~\d+(\.[^.]*)$/,'$1').replace(/~\d+$/,'');
 
 async function uploadDocs(){
   const inv = document.getElementById('docInv').value;
@@ -794,11 +796,21 @@ async function uploadDocs(){
   if(!files.length){ msg.textContent='⚠️ เลือกไฟล์ก่อน'; msg.style.color='#b45309'; return; }
   btn.disabled = true;
   let ok=0, fail=0;
+  /* ชื่อซ้ำ → ไม่ทับ แต่ต่อท้าย ~timestamp เก็บเป็นเวอร์ชันใหม่ (Dashboard โชว์เฉพาะล่าสุด) */
+  const existing = new Set(
+    ((await sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+dtype,{limit:200})).data||[]).map(x=>x.name)
+  );
   for(const f of files){
     msg.textContent = `⏳ กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
-    const path = docSafe(inv) + '/' + dtype + '/' + f.name;
-    const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:true, contentType:f.type||'application/octet-stream'});
-    if(error){ fail++; console.error('upload', f.name, error); } else ok++;
+    let name = f.name;
+    if(existing.has(name)){
+      const m = name.match(/^(.*?)(\.[^.]*)?$/);
+      name = m[1] + '~' + Date.now() + (m[2]||'');
+    }
+    existing.add(name);
+    const path = docSafe(inv) + '/' + dtype + '/' + name;
+    const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:false, contentType:f.type||'application/octet-stream'});
+    if(error){ fail++; console.error('upload', name, error); } else ok++;
   }
   btn.disabled = false;
   msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์` : `✅ อัพโหลด ${docTypeLabel(dtype)} สำเร็จ ${ok} ไฟล์`;
@@ -828,13 +840,21 @@ async function loadDocList(){
   cnt.textContent = all.length + ' ไฟล์';
   if(!all.length){ tb.innerHTML='<tr><td colspan="5" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
   const fmSize = n => n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
+  /* หาเวอร์ชันล่าสุดของแต่ละชื่อฐาน (ต่อประเภท) */
+  const latest = {};
+  all.forEach(f=>{
+    const k = f.dtype+'|'+docBaseName(f.name);
+    if(!latest[k] || String(f.created_at) > String(latest[k].created_at)) latest[k] = f;
+  });
   tb.innerHTML = all.map(f=>{
     const ico = /\.pdf$/i.test(f.name) ? '📄' : '🖼️';
+    const isOld = latest[f.dtype+'|'+docBaseName(f.name)] !== f;
+    const oldTag = isOld ? ' <span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:4px;padding:1px 5px;">🕐 เวอร์ชันเก่า</span>' : '';
     const dt = f.created_at ? new Date(f.created_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-';
     const nameEsc = f.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-    return `<tr>
+    return `<tr${isOld?' style="opacity:.6;"':''}>
       <td><span style="font-size:10px;font-weight:800;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;white-space:nowrap;">${docTypeLabel(f.dtype)}</span></td>
-      <td>${ico} ${f.name}</td>
+      <td>${ico} ${f.name}${oldTag}</td>
       <td>${f.metadata&&f.metadata.size?fmSize(f.metadata.size):'-'}</td>
       <td>${dt}</td>
       <td style="white-space:nowrap;">
