@@ -361,9 +361,8 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
               <option value="OCF">OCF — ค่าระวาง</option>
               <option value="TLX">TLX — Telex</option>
             </select>
-            <select class="pending-select" id="s_pending" style="flex:1;min-width:200px;">
-              <option value="">— เลือกอินวอยซ์ —</option>
-            </select>
+            <input class="form-input pending-select" id="s_pending" list="s_pendingList" placeholder="— พิมพ์ค้นหาหรือเลือกอินวอยซ์ —" autocomplete="off" style="flex:1;min-width:200px;">
+            <datalist id="s_pendingList"></datalist>
             <button class="btn btn-primary" style="flex-shrink:0;padding:9px 16px;" onclick="addFromPending()">+ เพิ่มแถว</button>
           </div>
         </div>
@@ -1301,25 +1300,29 @@ async function loadPendingData(){
   refreshQuickDropdown();
 }
 
-// ── Build options HTML for a given type ──
-function buildPendingOptions(type){
-  const filtered = type==='TLX'
-    ? allVessels.filter(r=>!paidTLXSet.has(normInv(r.invoice_no)))
-    : allVessels.filter(r=>!paidOCFSet.has(normInv(r.invoice_no)));
-  const byVsl = {};
-  filtered.forEach(r=>{
-    const k = (r.vessel_name||'ไม่ระบุ')+'|'+fmDate(r.sail_date);
-    if(!byVsl[k]) byVsl[k]={label:(r.vessel_name||'ไม่ระบุ')+' ('+fmDate(r.sail_date)+')',rows:[]};
-    byVsl[k].rows.push(r);
-  });
-  let html = `<option value="">— เลือก (${filtered.length} รายการ) —</option>`;
-  Object.values(byVsl).forEach(g=>{
-    html += `<optgroup label="🚢 ${g.label}">`;
-    g.rows.forEach(r=>{
-      const val = type==='TLX'?'TLX-'+r.invoice_no:r.invoice_no;
-      html += `<option value="${h(val)}" data-inv="${h(r.invoice_no)}">${h(r.invoice_no)} · ${r.container_count||'?'} ตู้</option>`;
+// ── รายการค้างจ่ายตาม type (TLX: ตัดเรือที่ออกเกิน 60 วัน — ไม่มี Telex แล้ว) ──
+function pendingRows(type){
+  if(type==='TLX'){
+    const cutoff = Date.now() - 60*24*60*60*1000;
+    return allVessels.filter(r=>{
+      if(paidTLXSet.has(normInv(r.invoice_no))) return false;
+      if(r.sail_date){ const d=new Date(r.sail_date); if(!isNaN(d)&&d.getTime()<cutoff) return false; }
+      return true;
     });
-    html += '</optgroup>';
+  }
+  return allVessels.filter(r=>!paidOCFSet.has(normInv(r.invoice_no)));
+}
+
+// ── Build datalist options (พิมพ์ค้นหาได้) ──
+let _pendMap = {};
+function buildPendingOptions(type){
+  const filtered = pendingRows(type);
+  _pendMap = {};
+  let html = '';
+  filtered.forEach(r=>{
+    const label = `${r.invoice_no} · ${r.container_count||'?'} ตู้ · ${r.vessel_name||'ไม่ระบุ'} (${fmDate(r.sail_date)})`;
+    _pendMap[label] = {desc: type==='TLX'?'TLX-'+r.invoice_no:r.invoice_no, inv: r.invoice_no};
+    html += `<option value="${h(label)}"></option>`;
   });
   return html;
 }
@@ -1327,10 +1330,12 @@ function buildPendingOptions(type){
 // ── Refresh quick-add dropdown ──
 function refreshQuickDropdown(){
   const type = document.getElementById('s_quick_type').value;
-  const sel  = document.getElementById('s_pending');
-  sel.innerHTML = buildPendingOptions(type);
-  const pendOCF = allVessels.filter(r=>!paidOCFSet.has(normInv(r.invoice_no))).length;
-  const pendTLX = allVessels.filter(r=>!paidTLXSet.has(normInv(r.invoice_no))).length;
+  document.getElementById('s_pendingList').innerHTML = buildPendingOptions(type);
+  const inp = document.getElementById('s_pending');
+  inp.value = '';
+  inp.placeholder = `— พิมพ์ค้นหาหรือเลือก (${pendingRows(type).length} รายการ) —`;
+  const pendOCF = pendingRows('OCF').length;
+  const pendTLX = pendingRows('TLX').length;
   const el = document.getElementById('pendingCount');
   el.textContent = `OCF: ${pendOCF} · TLX: ${pendTLX}`;
   el.style.background = (pendOCF+pendTLX)>0?'#fef3c7':'#dcfce7';
@@ -1339,14 +1344,20 @@ function refreshQuickDropdown(){
 
 // ── เพิ่มแถวจาก quick dropdown ──
 function addFromPending(){
-  const sel  = document.getElementById('s_pending');
-  const desc = sel.value;
-  if(!desc) return;
+  const inp  = document.getElementById('s_pending');
+  const val  = inp.value.trim();
+  if(!val) return;
   const type = document.getElementById('s_quick_type').value;
-  const opt  = sel.options[sel.selectedIndex];
-  const rawInv = opt?.dataset?.inv || desc.replace(/^TLX-/i,'');
-  insertBatchRow(type, desc, rawInv);
-  sel.value = '';  // reset dropdown หลังเพิ่ม
+  const entry = _pendMap[val];
+  if(!entry){
+    // เผื่อพิมพ์เฉพาะเลขอินวอยซ์เอง — หา match จาก invoice_no
+    const found = Object.values(_pendMap).find(e=>normInv(e.inv)===normInv(val));
+    if(!found){ alert('ไม่พบ "'+val+'" ในรายการ — กรุณาเลือกจากรายการที่เด้งขึ้นมา'); return; }
+    insertBatchRow(type, found.desc, found.inv);
+  }else{
+    insertBatchRow(type, entry.desc, entry.inv);
+  }
+  inp.value = '';  // reset หลังเพิ่ม
 }
 
 // ── เพิ่มแถวเปล่า ──
