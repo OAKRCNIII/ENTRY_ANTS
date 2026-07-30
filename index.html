@@ -679,16 +679,20 @@ const _CREDS = [
   {user:'ANTS_THIRA', hash:'33ac0909156b1b05d69a4cd3b827fb9b4789ba219e7fb2437ac4323d5771a0eb', role:'vessel_manager'},
   {user:'SU_THIRA',   hash:'61712a2a921078036bdbcd28455bf2417c14ee9ce465a0d1c0027ef488255e09', role:'su_clerk'},
   {user:'DOC_THIRA',  hash:'63162c7482c634ef500b86969ad61af159550e3c441c0d2d4be44bab08553921', role:'doc_clerk'},
+  {user:'TARN_ANTS',  hash:'397f493666309dc1ed7b987b4eeaf66de187af201a8387cfe8e25c1f909d06f0', role:'doc_draft'},
+  {user:'BOW_ANTS',   hash:'43151a6c0190522a62a4625dbfe41e7e9b5e810adab3af286ffeefa761e87fd0', role:'doc_draft'},
 ];
 /* tabs ที่แต่ละ role มีสิทธิ์เห็น (ไม่ระบุ = เห็นทั้งหมด)
-   1. OAK_THIRA (admin)        → ทุกแท็บ
-   2. SU_THIRA (su_clerk)      → SU Statement เท่านั้น
-   3. ANTS_THIRA (vessel_mgr)  → จัดเรือ + ปฏิทินเรือ
-   4. DOC_THIRA (doc_clerk)    → เอกสาร เท่านั้น */
+   1. OAK_THIRA (admin)          → ทุกแท็บ
+   2. SU_THIRA (su_clerk)        → SU Statement เท่านั้น
+   3. ANTS_THIRA (vessel_mgr)    → จัดเรือ + ปฏิทินเรือ
+   4. DOC_THIRA (doc_clerk)      → เอกสาร (DRAFT + ตัวจริง)
+   5. TARN/BOW_ANTS (doc_draft)  → เอกสาร (อัพได้เฉพาะ DRAFT) */
 const ROLE_TABS = {
   su_clerk: ['stmt'],
   vessel_manager: ['vessel','cal'],
   doc_clerk: ['docs'],
+  doc_draft: ['docs'],
 };
 const sb = supabase.createClient(SB_URL, SB_KEY);
 let USER_ROLE = '', LOGGED_USER = '';
@@ -821,11 +825,15 @@ function docFolders(inv, stage, type){
   return [base+'/DRAFT/'+type];
 }
 
-/* สร้างช่องอัพโหลด 2 ส่วน (DRAFT / ตั๋วตัวจริง) ส่วนละ 7 ช่อง */
+/* สร้างช่องอัพโหลด 2 ส่วน (DRAFT / ตั๋วตัวจริง) ส่วนละ 7 ช่อง
+   role 'doc_draft' (TARN/BOW) → อัพได้เฉพาะ DRAFT */
 function renderDocSlots(){
   const wrap = document.getElementById('docSlotsWrap');
   if(!wrap) return;
-  wrap.innerHTML = DOC_STAGES.map(st=>`
+  const stages = USER_ROLE==='doc_draft' ? DOC_STAGES.filter(s=>s.key==='DRAFT') : DOC_STAGES;
+  wrap.style.gridTemplateColumns = stages.length>1 ? '1fr 1fr' : '1fr';
+  wrap.style.maxWidth = stages.length>1 ? 'none' : '560px';
+  wrap.innerHTML = stages.map(st=>`
     <div style="border:1.5px solid ${st.bd};background:${st.bg};border-radius:10px;padding:12px 14px;">
       <div style="font-size:12px;font-weight:800;color:${st.color};margin-bottom:8px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label}</div>
       <div style="display:grid;grid-template-columns:1fr;gap:7px;">
