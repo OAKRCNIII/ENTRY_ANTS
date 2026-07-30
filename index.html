@@ -599,16 +599,8 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
             <datalist id="docInvList"></datalist>
           </div>
         </div>
-        <!-- 7 ช่องเอกสาร — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
-        <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px;max-width:560px;">
-          <div class="form-group"><label class="form-label">1. INVOICE</label><input class="form-input" id="docFile_INVOICE" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
-          <div class="form-group"><label class="form-label">2. PACKING LIST</label><input class="form-input" id="docFile_PACKING_LIST" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
-          <div class="form-group"><label class="form-label">3. B/L</label><input class="form-input" id="docFile_BL" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
-          <div class="form-group"><label class="form-label">4. C/O</label><input class="form-input" id="docFile_CO" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
-          <div class="form-group"><label class="form-label">5. PHYTO</label><input class="form-input" id="docFile_PHYTO" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
-          <div class="form-group"><label class="form-label">6. IPPC</label><input class="form-input" id="docFile_IPPC" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
-          <div class="form-group"><label class="form-label">7. ใบฉีดยุง</label><input class="form-input" id="docFile_MOSQUITO" type="file" accept="application/pdf,image/*" multiple style="padding:6px;font-size:12px;"></div>
-        </div>
+        <!-- 2 ส่วน: DRAFT + ตั๋วตัวจริง — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
+        <div id="docSlotsWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;"></div>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
           <button class="btn btn-primary" id="docUploadBtn" onclick="uploadDocs()">⬆️ อัพโหลดทั้งหมด</button>
           <span style="font-size:10.5px;color:#94a3b8;">PDF / รูปภาพ · สูงสุด 10MB/ไฟล์ · แนบกี่ช่องก็ได้แล้วกดปุ่มเดียว</span>
@@ -788,6 +780,7 @@ const _docNorm = s => String(s||'').toUpperCase().replace(/\s+/g,'');
 async function initDocs(){
   if(_docsInit) return;
   _docsInit = true;
+  renderDocSlots();
   const dl = document.getElementById('docInv').list || document.getElementById('docInvList');
   try{
     /* เฉพาะอินวอยซ์ที่สร้างใน 30 วันล่าสุด — อันเก่ากว่านั้นไม่โชว์ */
@@ -804,7 +797,7 @@ async function initDocs(){
   loadDocHistory();
 }
 
-/* ประเภทเอกสาร 7 ชนิด — เก็บแยกโฟลเดอร์: {inv}/{TYPE}/{filename} */
+/* ประเภทเอกสาร 7 ชนิด — เก็บแยกโฟลเดอร์: {inv}/{STAGE}/{TYPE}/{filename} */
 const DOC_TYPES = [
   {key:'INVOICE',      label:'INVOICE'},
   {key:'PACKING_LIST', label:'PACKING LIST'},
@@ -814,7 +807,32 @@ const DOC_TYPES = [
   {key:'IPPC',         label:'IPPC'},
   {key:'MOSQUITO',     label:'ใบฉีดยุง'},
 ];
-const docTypeLabel = k => (DOC_TYPES.find(t=>t.key===k)||{}).label||k;
+/* 2 สถานะ: DRAFT (ร่าง) + FINAL (ตั๋วตัวจริง) */
+const DOC_STAGES = [
+  {key:'DRAFT', label:'DRAFT',        color:'#b45309', bg:'#fffbeb', bd:'#fcd34d'},
+  {key:'FINAL', label:'ตั๋วตัวจริง', color:'#166534', bg:'#f0fdf4', bd:'#86efac'},
+];
+const docTypeLabel  = k => (DOC_TYPES.find(t=>t.key===k)||{}).label||k;
+const docStageLabel = k => (DOC_STAGES.find(s=>s.key===k)||{}).label||k;
+/* prefix โฟลเดอร์ที่ต้อง list ต่อ stage+type — FINAL รวม legacy path เดิม {inv}/{type} ด้วย */
+function docFolders(inv, stage, type){
+  const base = docSafe(inv);
+  if(stage==='FINAL') return [base+'/FINAL/'+type, base+'/'+type];   // ใหม่ + legacy
+  return [base+'/DRAFT/'+type];
+}
+
+/* สร้างช่องอัพโหลด 2 ส่วน (DRAFT / ตั๋วตัวจริง) ส่วนละ 7 ช่อง */
+function renderDocSlots(){
+  const wrap = document.getElementById('docSlotsWrap');
+  if(!wrap) return;
+  wrap.innerHTML = DOC_STAGES.map(st=>`
+    <div style="border:1.5px solid ${st.bd};background:${st.bg};border-radius:10px;padding:12px 14px;">
+      <div style="font-size:12px;font-weight:800;color:${st.color};margin-bottom:8px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label}</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:7px;">
+        ${DOC_TYPES.map((t,i)=>`<div class="form-group" style="margin:0;"><label class="form-label" style="font-size:10.5px;">${i+1}. ${t.label}</label><input class="form-input" id="docFile_${st.key}_${t.key}" type="file" accept="application/pdf,image/*" multiple style="padding:5px;font-size:11px;"></div>`).join('')}
+      </div>
+    </div>`).join('');
+}
 /* ชื่อฐานของไฟล์ (ตัด ~timestamp ที่ระบบต่อท้ายตอนชื่อซ้ำ) */
 const docBaseName = n => String(n||'').replace(/~\d+(\.[^.]*)$/,'$1').replace(/~\d+$/,'');
 /* Storage ไม่รับชื่อไฟล์ภาษาไทย/อักขระพิเศษ → แปลงเป็นชื่อปลอดภัย
@@ -840,18 +858,22 @@ async function uploadDocs(){
     msg.textContent='⚠️ อินวอยซ์ "'+inv+'" ไม่อยู่ในรายการ — กรุณาเลือกจากรายการที่เด้งขึ้นมา';
     msg.style.color='#b45309'; return;
   }
-  /* รวมไฟล์จากทุกช่อง */
-  const batches = DOC_TYPES
-    .map(t=>({dtype:t.key, label:t.label, files:[...(document.getElementById('docFile_'+t.key).files||[])]}))
-    .filter(b=>b.files.length);
+  /* รวมไฟล์จากทุกช่อง (stage × type) */
+  const batches = [];
+  DOC_STAGES.forEach(st=>DOC_TYPES.forEach(t=>{
+    const el = document.getElementById('docFile_'+st.key+'_'+t.key);
+    const files = [...(el?.files||[])];
+    if(files.length) batches.push({stage:st.key, dtype:t.key, label:st.label+' · '+t.label, files});
+  }));
   if(!batches.length){ msg.textContent='⚠️ ยังไม่ได้แนบไฟล์ในช่องไหนเลย'; msg.style.color='#b45309'; return; }
   btn.disabled = true;
   let ok=0, fail=0;
   try{
     for(const b of batches){
+      const folder = docSafe(inv)+'/'+b.stage+'/'+b.dtype;
       /* ชื่อซ้ำ → ไม่ทับ แต่ต่อท้าย ~timestamp เก็บเป็นเวอร์ชันใหม่ (Dashboard โชว์เฉพาะล่าสุด) */
       const existing = new Set(
-        ((await sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+b.dtype,{limit:200})).data||[]).map(x=>x.name)
+        ((await sb.storage.from('invoice_docs').list(folder,{limit:200})).data||[]).map(x=>x.name)
       );
       for(const f of b.files){
         msg.textContent = `⏳ ${b.label} — กำลังอัพโหลด ${f.name} ...`; msg.style.color='#64748b';
@@ -861,18 +883,18 @@ async function uploadDocs(){
           name = m[1] + '~' + Date.now() + (m[2]||'');
         }
         existing.add(name);
-        const path = docSafe(inv) + '/' + b.dtype + '/' + name;
+        const path = folder + '/' + name;
         const {error} = await sb.storage.from('invoice_docs').upload(path, f, {upsert:false, contentType:f.type||'application/octet-stream'});
         if(error){ fail++; console.error('upload', name, error); }
         else{
           ok++;
-          sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:b.dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'upload'}).then(()=>{});
+          sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:b.stage+'/'+b.dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'upload'}).then(()=>{});
         }
       }
     }
-    msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์ — ลองกดอัพโหลดอีกครั้ง` : `✅ อัพโหลดสำเร็จ ${ok} ไฟล์ (${batches.length} ประเภท)`;
+    msg.textContent = fail ? `⚠️ สำเร็จ ${ok} · ล้มเหลว ${fail} ไฟล์ — ลองกดอัพโหลดอีกครั้ง` : `✅ อัพโหลดสำเร็จ ${ok} ไฟล์`;
     msg.style.color = fail ? '#b45309' : '#15803d';
-    if(!fail) DOC_TYPES.forEach(t=>{ document.getElementById('docFile_'+t.key).value=''; });
+    if(!fail) DOC_STAGES.forEach(st=>DOC_TYPES.forEach(t=>{const el=document.getElementById('docFile_'+st.key+'_'+t.key);if(el)el.value='';}));
   }catch(e){
     console.error('uploadDocs', e);
     msg.textContent = '⚠️ อัพโหลดสะดุด ('+(ok)+' ไฟล์สำเร็จ) — เช็คเน็ตแล้วกดอัพโหลดอีกครั้ง';
@@ -889,69 +911,81 @@ async function loadDocList(){
   const tb = document.getElementById('docTbody');
   const cnt = document.getElementById('docCount');
   const chk = document.getElementById('docChecklist');
-  if(!inv){ tb.innerHTML='<tr><td colspan="6" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>'; cnt.textContent='—'; chk.innerHTML=''; return; }
-  tb.innerHTML='<tr><td colspan="6" class="loading">⏳ กำลังโหลด...</td></tr>';
-  /* list ทุกประเภทพร้อมกัน + ดึงชื่อผู้อัพโหลดจาก log */
-  const [results, logRes] = await Promise.all([
-    Promise.all(DOC_TYPES.map(t=>
-      sb.storage.from('invoice_docs').list(docSafe(inv)+'/'+t.key, {limit:100, sortBy:{column:'created_at', order:'desc'}})
-        .then(r=>({type:t.key, files:(r.data||[]).filter(f=>f.name && !f.name.startsWith('.'))}))
-    )),
+  if(!inv){ tb.innerHTML='<tr><td colspan="7" class="empty" style="padding:18px;">เลือกอินวอยซ์ก่อน</td></tr>'; cnt.textContent='—'; chk.innerHTML=''; return; }
+  tb.innerHTML='<tr><td colspan="7" class="loading">⏳ กำลังโหลด...</td></tr>';
+  /* list ทุก stage × type (FINAL รวม legacy) พร้อมกัน + log */
+  const jobs = [];
+  DOC_STAGES.forEach(st=>DOC_TYPES.forEach(t=>{
+    docFolders(inv, st.key, t.key).forEach(folder=>{
+      jobs.push(
+        sb.storage.from('invoice_docs').list(folder, {limit:100, sortBy:{column:'created_at', order:'desc'}})
+          .then(r=>({stage:st.key, type:t.key, folder, files:(r.data||[]).filter(f=>f.name && !f.name.startsWith('.'))}))
+      );
+    });
+  }));
+  const [jobRes, logRes] = await Promise.all([
+    Promise.all(jobs),
     sb.from('doc_upload_log').select('doc_type,file_name,uploaded_by').eq('invoice_no',inv).eq('action','upload').order('id',{ascending:false}).limit(500).then(r=>r.data||[], ()=>[])
   ]);
   const uploaderMap = {};
   logRes.forEach(l=>{ const k=l.doc_type+'|'+l.file_name; if(!(k in uploaderMap)) uploaderMap[k]=l.uploaded_by; });
-  const all = results.flatMap(r=>r.files.map(f=>({...f, dtype:r.type})));
-  /* checklist ครบ/ขาด */
-  chk.innerHTML = DOC_TYPES.map(t=>{
-    const has = results.find(r=>r.type===t.key).files.length>0;
-    return `<span style="font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:12px;${has?'background:#dcfce7;color:#166534;border:1px solid #86efac;':'background:#f1f5f9;color:#94a3b8;border:1px dashed #cbd5e0;'}">${has?'✓':'○'} ${t.label}</span>`;
-  }).join('');
+  const all = jobRes.flatMap(r=>r.files.map(f=>({...f, stage:r.stage, dtype:r.type, folder:r.folder})));
+  /* checklist: ต่อประเภท โชว์ draft + จริง */
+  chk.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;width:100%;">` + DOC_TYPES.map(t=>{
+    const mk = stage => {
+      const has = all.some(f=>f.dtype===t.key && f.stage===stage);
+      const st = DOC_STAGES.find(s=>s.key===stage);
+      return `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?'✓':'○'} ${st.label}</span>`;
+    };
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;"><span style="min-width:110px;font-weight:700;color:#374151;">${t.label}</span>${mk('DRAFT')}${mk('FINAL')}</div>`;
+  }).join('') + `</div>`;
   cnt.textContent = all.length + ' ไฟล์';
-  if(!all.length){ tb.innerHTML='<tr><td colspan="6" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
+  if(!all.length){ tb.innerHTML='<tr><td colspan="7" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
   const fmSize = n => n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
-  /* 1 ประเภท = เอกสารเดียว → ตัวล่าสุดของแต่ละประเภทคือฉบับจริง ที่เหลือ = เวอร์ชันเก่า */
+  /* ล่าสุดต่อ (stage+type) = ฉบับจริง ที่เหลือ = เวอร์ชันเก่า */
   const latest = {};
-  all.forEach(f=>{
-    const k = f.dtype;
-    if(!latest[k] || String(f.created_at) > String(latest[k].created_at)) latest[k] = f;
-  });
+  all.forEach(f=>{ const k=f.stage+'|'+f.dtype; if(!latest[k]||String(f.created_at)>String(latest[k].created_at)) latest[k]=f; });
+  /* จัดเรียง: stage (DRAFT ก่อน) → ประเภท */
+  const order = f => DOC_STAGES.findIndex(s=>s.key===f.stage)*100 + DOC_TYPES.findIndex(t=>t.key===f.dtype);
+  all.sort((a,b)=>order(a)-order(b) || String(b.created_at).localeCompare(String(a.created_at)));
   tb.innerHTML = all.map(f=>{
     const ico = /\.pdf$/i.test(f.name) ? '📄' : '🖼️';
-    const isOld = latest[f.dtype] !== f;
+    const isOld = latest[f.stage+'|'+f.dtype] !== f;
     const oldTag = isOld ? ' <span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:4px;padding:1px 5px;">🕐 เวอร์ชันเก่า</span>' : '';
+    const st = DOC_STAGES.find(s=>s.key===f.stage)||{};
     const dt = f.created_at ? new Date(f.created_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-';
     const nameEsc = f.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    const folderEsc = f.folder.replace(/'/g,"\\'");
     return `<tr${isOld?' style="opacity:.6;"':''}>
+      <td><span style="font-size:10px;font-weight:800;background:${st.bg};color:${st.color};border:1px solid ${st.bd};border-radius:5px;padding:2px 7px;white-space:nowrap;">${docStageLabel(f.stage)}</span></td>
       <td><span style="font-size:10px;font-weight:800;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;white-space:nowrap;">${docTypeLabel(f.dtype)}</span></td>
       <td>${ico} ${f.name}${oldTag}</td>
       <td>${f.metadata&&f.metadata.size?fmSize(f.metadata.size):'-'}</td>
       <td>${dt}</td>
-      <td><span style="font-size:11px;font-weight:700;color:#0e7490;">👤 ${uploaderMap[f.dtype+'|'+f.name]||'-'}</span></td>
+      <td><span style="font-size:11px;font-weight:700;color:#0e7490;">👤 ${uploaderMap[f.stage+'/'+f.dtype+'|'+f.name]||uploaderMap[f.dtype+'|'+f.name]||'-'}</span></td>
       <td style="white-space:nowrap;">
-        <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${f.dtype}','${nameEsc}')">⬇️ เปิด/โหลด</button>
-        <button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${f.dtype}','${nameEsc}')">🗑️</button>
+        <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${folderEsc}','${nameEsc}')">⬇️ เปิด/โหลด</button>
+        <button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${folderEsc}','${nameEsc}','${f.stage}/${f.dtype}')">🗑️</button>
       </td>
     </tr>`;
   }).join('');
 }
 
-async function openDoc(dtype, name){
-  const inv = document.getElementById('docInv').value;
-  const {data, error} = await sb.storage.from('invoice_docs').createSignedUrl(docSafe(inv)+'/'+dtype+'/'+name, 3600);
+async function openDoc(folder, name){
+  const {data, error} = await sb.storage.from('invoice_docs').createSignedUrl(folder+'/'+name, 3600);
   if(error||!data){ alert('เปิดไฟล์ไม่สำเร็จ'); return; }
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 }
 
 const _DOC_DEL_PIN = '625465'; /* รหัสเดียวกับ PIN ยืนยันใน Dashboard หลัก */
-async function deleteDoc(dtype, name){
+async function deleteDoc(folder, name, logType){
   const inv = document.getElementById('docInv').value;
-  const pin = prompt('🔐 ใส่รหัสเพื่อยืนยันการลบไฟล์\n"'+name+'" ('+docTypeLabel(dtype)+')');
+  const pin = prompt('🔐 ใส่รหัสเพื่อยืนยันการลบไฟล์\n"'+name+'"');
   if(pin === null) return; /* กดยกเลิก */
   if(pin !== _DOC_DEL_PIN){ alert('❌ รหัสไม่ถูกต้อง — ไม่ได้ลบไฟล์'); return; }
-  const {error} = await sb.storage.from('invoice_docs').remove([docSafe(inv)+'/'+dtype+'/'+name]);
+  const {error} = await sb.storage.from('invoice_docs').remove([folder+'/'+name]);
   if(error){ alert('ลบไม่สำเร็จ'); return; }
-  sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:dtype, file_name:name, uploaded_by:LOGGED_USER||'?', action:'delete'}).then(()=>{});
+  sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:logType||'?', file_name:name, uploaded_by:LOGGED_USER||'?', action:'delete'}).then(()=>{});
   loadDocList();
   loadDocHistory();
 }
@@ -978,7 +1012,7 @@ function renderDocHistory(){
     String(r.invoice_no).toLowerCase().includes(q) ||
     String(r.uploaded_by).toLowerCase().includes(q) ||
     String(r.file_name).toLowerCase().includes(q) ||
-    docTypeLabel(r.doc_type).toLowerCase().includes(q)
+    String(r.doc_type).toLowerCase().includes(q)
   ) : _docHist;
   cnt.textContent = rows.length + (_docHistDone ? ' รายการ' : '+ รายการ');
   if(!rows.length){ body.innerHTML='<tr><td colspan="6" class="empty" style="padding:18px;">ไม่มีประวัติ</td></tr>'; return; }
@@ -992,7 +1026,7 @@ function renderDocHistory(){
       <td style="font-weight:700;color:#0e7490;">👤 ${r.uploaded_by}</td>
       <td>${act}</td>
       <td style="font-weight:700;">${r.invoice_no}</td>
-      <td><span style="font-size:10px;font-weight:800;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;">${docTypeLabel(r.doc_type)}</span></td>
+      <td>${(()=>{const p=String(r.doc_type||'').split('/');const hasStage=p.length>1;const stg=hasStage?p[0]:'';const typ=hasStage?p[1]:p[0];const st=DOC_STAGES.find(s=>s.key===stg);return `${st?`<span style="font-size:9px;font-weight:800;background:${st.bg};color:${st.color};border:1px solid ${st.bd};border-radius:4px;padding:1px 5px;margin-right:3px;">${st.label}</span>`:''}<span style="font-size:10px;font-weight:800;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;">${docTypeLabel(typ)}</span>`;})()}</td>
       <td style="font-size:11.5px;">${r.file_name}</td>
     </tr>`;
   }).join('');
