@@ -845,8 +845,8 @@ function renderDocSlots(){
     </div>`).join('');
 }
 function clearDocSlot(id){ const el=document.getElementById('docFile_'+id); if(el) el.value=''; }
-/* ชื่อฐานของไฟล์ (ตัด ~timestamp ที่ระบบต่อท้ายตอนชื่อซ้ำ) */
-const docBaseName = n => String(n||'').replace(/~\d+(\.[^.]*)$/,'$1').replace(/~\d+$/,'');
+/* ชื่อฐานของไฟล์ (ตัด _v{timestamp} ที่ระบบต่อท้ายตอนชื่อซ้ำ; รองรับ ~ เก่าด้วย) */
+const docBaseName = n => String(n||'').replace(/(?:~|_v)\d+(\.[^.]*)$/,'$1').replace(/(?:~|_v)\d+$/,'');
 /* Storage ไม่รับชื่อไฟล์ภาษาไทย/อักขระพิเศษ → แปลงเป็นชื่อปลอดภัย
    ถ้าชื่อเหลือสั้นเกิน (เช่น ไทยล้วน) ใช้ {TYPE}_{วันเวลา} แทน */
 function docFileName(f, dtype){
@@ -892,7 +892,7 @@ async function uploadDocs(){
         let name = docFileName(f, b.dtype);
         if(existing.has(name)){
           const m = name.match(/^(.*?)(\.[^.]*)?$/);
-          name = m[1] + '~' + Date.now() + (m[2]||'');
+          name = m[1] + '_v' + Date.now() + (m[2]||'');
         }
         existing.add(name);
         const path = folder + '/' + name;
