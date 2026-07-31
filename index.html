@@ -302,7 +302,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
     <div class="header-right">
       <span id="userChip"></span>
       <button class="hbtn" id="refreshBtn" onclick="forceRefresh()" title="โหลดข้อมูลใหม่จาก Supabase">🔄 รีเฟรช</button>
-      <a class="hbtn" href="index.html" target="_blank">📊 Dashboard</a>
+      <a class="hbtn" id="dashLinkBtn" href="index.html" target="_blank">📊 Dashboard</a>
       <button class="hbtn danger" onclick="doLogout()">ออก</button>
     </div>
   </div>
@@ -706,6 +706,9 @@ async function _hash(s){
 }
 function applyRoleTabs(role){
   const allowed = ROLE_TABS[role]; /* undefined = ไม่จำกัด */
+  /* doc_draft (TARN/BOW) → ซ่อนปุ่มไป Dashboard หลัก */
+  const dashBtn = document.getElementById('dashLinkBtn');
+  if(dashBtn) dashBtn.style.display = role==='doc_draft' ? 'none' : '';
   const tabBtns = document.querySelectorAll('.tab[onclick*="switchTab"]');
   tabBtns.forEach(btn=>{
     const m = btn.getAttribute('onclick').match(/switchTab\('(\w+)'/);
