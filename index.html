@@ -601,7 +601,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
         </div>
         <!-- 2 ส่วน: DRAFT + ตั๋วตัวจริง — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
         <div id="docSlotsWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;"></div>
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
           <button class="btn btn-primary" id="docUploadBtn" onclick="uploadDocs()">⬆️ อัพโหลดทั้งหมด</button>
           <span style="font-size:10.5px;color:#94a3b8;">PDF / รูปภาพ · สูงสุด 10MB/ไฟล์ · แนบกี่ช่องก็ได้แล้วกดปุ่มเดียว</span>
         </div>
@@ -837,10 +837,11 @@ function renderDocSlots(){
     <div style="border:1.5px solid ${st.bd};background:${st.bg};border-radius:10px;padding:12px 14px;">
       <div style="font-size:12px;font-weight:800;color:${st.color};margin-bottom:8px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label}</div>
       <div style="display:grid;grid-template-columns:1fr;gap:7px;">
-        ${DOC_TYPES.map((t,i)=>`<div class="form-group" style="margin:0;"><label class="form-label" style="font-size:10.5px;">${i+1}. ${t.label}</label><input class="form-input" id="docFile_${st.key}_${t.key}" type="file" accept="application/pdf,image/*" multiple style="padding:5px;font-size:11px;"></div>`).join('')}
+        ${DOC_TYPES.map((t,i)=>`<div class="form-group" style="margin:0;"><label class="form-label" style="font-size:10.5px;">${i+1}. ${t.label}</label><div style="display:flex;gap:5px;align-items:center;"><input class="form-input" id="docFile_${st.key}_${t.key}" type="file" accept="application/pdf,image/*" multiple style="flex:1;min-width:0;padding:5px;font-size:11px;"><button type="button" onclick="clearDocSlot('${st.key}_${t.key}')" title="ล้างช่องนี้" style="flex-shrink:0;width:26px;height:26px;border:1px solid #fca5a5;background:#fee2e2;color:#dc2626;border-radius:6px;cursor:pointer;font-size:12px;line-height:1;">✕</button></div></div>`).join('')}
       </div>
     </div>`).join('');
 }
+function clearDocSlot(id){ const el=document.getElementById('docFile_'+id); if(el) el.value=''; }
 /* ชื่อฐานของไฟล์ (ตัด ~timestamp ที่ระบบต่อท้ายตอนชื่อซ้ำ) */
 const docBaseName = n => String(n||'').replace(/~\d+(\.[^.]*)$/,'$1').replace(/~\d+$/,'');
 /* Storage ไม่รับชื่อไฟล์ภาษาไทย/อักขระพิเศษ → แปลงเป็นชื่อปลอดภัย
