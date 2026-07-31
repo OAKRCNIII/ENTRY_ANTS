@@ -977,7 +977,7 @@ async function loadDocList(){
       <td><span style="font-size:11px;font-weight:700;color:#0e7490;">👤 ${uploaderMap[f.stage+'/'+f.dtype+'|'+f.name]||uploaderMap[f.dtype+'|'+f.name]||'-'}</span></td>
       <td style="white-space:nowrap;">
         <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${folderEsc}','${nameEsc}')">⬇️ เปิด/โหลด</button>
-        <button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${folderEsc}','${nameEsc}','${f.stage}/${f.dtype}')">🗑️</button>
+        ${USER_ROLE==='doc_draft'?'':`<button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${folderEsc}','${nameEsc}','${f.stage}/${f.dtype}')">🗑️</button>`}
       </td>
     </tr>`;
   }).join('');
