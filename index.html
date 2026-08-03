@@ -592,12 +592,11 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
     <div class="tab-content" id="tab-docs">
       <div class="form-card">
         <div class="section-title">📎 อัพโหลดเอกสารคู่อินวอยซ์</div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
-          <div class="form-group" style="flex:1;min-width:240px;">
-            <label class="form-label">อินวอยซ์ (30 วันล่าสุด · พิมพ์ค้นหาได้)</label>
-            <input class="form-input" id="docInv" list="docInvList" placeholder="พิมพ์หรือเลือกอินวอยซ์..." onchange="loadDocList()" style="width:100%;" autocomplete="off">
-            <datalist id="docInvList"></datalist>
-          </div>
+        <div id="docInvBox" style="background:#fffbeb;border:2px solid #fcd34d;border-radius:12px;padding:12px 14px;margin-bottom:14px;transition:border-color .15s,background .15s;">
+          <label class="form-label" style="color:#92400e;">📌 อินวอยซ์ (30 วันล่าสุด · พิมพ์ค้นหาได้) <span style="color:#dc2626;">*</span></label>
+          <input class="form-input" id="docInv" list="docInvList" placeholder="พิมพ์หรือเลือกอินวอยซ์..." onchange="onDocInvChange()" oninput="onDocInvChange()" style="width:100%;background:#fff;" autocomplete="off">
+          <datalist id="docInvList"></datalist>
+          <div id="docInvWarn" style="display:none;font-size:12px;font-weight:700;color:#dc2626;margin-top:7px;">⚠️ กรุณากรอก/เลือกอินวอยซ์ก่อนอัพโหลด</div>
         </div>
         <!-- 2 ส่วน: DRAFT + ตั๋วตัวจริง — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
         <div id="docSlotsWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;"></div>
@@ -860,11 +859,30 @@ function docFileName(f, dtype){
   return base + ext;
 }
 
+/* ล้าง/แสดง เตือนกรอกอินวอยซ์ */
+function onDocInvChange(){
+  const inv = document.getElementById('docInv').value.trim();
+  const box = document.getElementById('docInvBox');
+  const warn = document.getElementById('docInvWarn');
+  if(inv){
+    box.style.borderColor='#fcd34d'; box.style.background='#fffbeb';
+    warn.style.display='none';
+  }
+  loadDocList();
+}
+function flagDocInvMissing(){
+  const box = document.getElementById('docInvBox');
+  const warn = document.getElementById('docInvWarn');
+  box.style.borderColor='#dc2626'; box.style.background='#fef2f2';
+  warn.style.display='block';
+  document.getElementById('docInv').focus();
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+}
 async function uploadDocs(){
   const inv = document.getElementById('docInv').value.trim();
   const msg = document.getElementById('docMsg');
   const btn = document.getElementById('docUploadBtn');
-  if(!inv){ msg.textContent='⚠️ เลือกอินวอยซ์ก่อน'; msg.style.color='#b45309'; return; }
+  if(!inv){ flagDocInvMissing(); msg.textContent='⚠️ กรุณากรอกอินวอยซ์ก่อน'; msg.style.color='#dc2626'; return; }
   /* ต้องตรงกับรายการจริง — กันพิมพ์ผิดแล้วไฟล์หลุดไปโฟลเดอร์ผิด */
   if(window._docInvSet && !window._docInvSet.has(inv.toUpperCase())){
     msg.textContent='⚠️ อินวอยซ์ "'+inv+'" ไม่อยู่ในรายการ — กรุณาเลือกจากรายการที่เด้งขึ้นมา';
