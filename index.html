@@ -314,6 +314,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
     <button class="tab" onclick="switchTab('cal',this)">📅 ปฏิทินเรือ</button>
     <button class="tab" onclick="switchTab('dbvessel',this)">📦 DATABASE เรือ</button>
     <button class="tab" onclick="switchTab('docs',this)">📎 เอกสาร</button>
+    <button class="tab" onclick="switchTab('workorder',this)">📋 ใบคำสั่ง</button>
   </div>
 
   <!-- MAIN -->
@@ -598,8 +599,6 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
           <datalist id="docInvList"></datalist>
           <div id="docInvWarn" style="display:none;font-size:12px;font-weight:700;color:#dc2626;margin-top:7px;">⚠️ กรุณากรอก/เลือกอินวอยซ์ก่อนอัพโหลด</div>
         </div>
-        <!-- ใบคำสั่ง (โผล่เมื่อเลือกอินวอยซ์) -->
-        <div id="woPanel" style="display:none;background:#eef6ff;border:2px solid #93c5fd;border-radius:12px;padding:14px 16px;margin-bottom:14px;"></div>
         <!-- 2 ส่วน: DRAFT + ตั๋วตัวจริง — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
         <div id="docSlotsWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;"></div>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
@@ -665,6 +664,21 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
       </div>
     </div><!-- /tab-docs -->
 
+    <!-- ══════════════════════════════
+         TAB: ใบคำสั่ง (work order)
+    ══════════════════════════════ -->
+    <div class="tab-content" id="tab-workorder">
+      <div class="form-card">
+        <div class="section-title">📋 ใบคำสั่ง</div>
+        <div style="background:#eef6ff;border:2px solid #93c5fd;border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+          <label class="form-label" style="color:#1e40af;">📌 อินวอยซ์ (30 วันล่าสุด · พิมพ์ค้นหาได้)</label>
+          <input class="form-input" id="woInv" list="woInvList" placeholder="พิมพ์หรือเลือกอินวอยซ์..." onchange="loadWorkOrder()" oninput="loadWorkOrder()" style="width:100%;background:#fff;" autocomplete="off">
+          <datalist id="woInvList"></datalist>
+        </div>
+        <div id="woPanel" style="display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px 16px;"></div>
+      </div>
+    </div><!-- /tab-workorder -->
+
   </div><!-- /main -->
 </div><!-- /app -->
 
@@ -694,9 +708,9 @@ const _CREDS = [
 const ROLE_TABS = {
   su_clerk: ['stmt'],
   vessel_manager: ['vessel','cal'],
-  doc_clerk: ['docs'],
-  doc_draft: ['docs'],
-  doc_wo: ['docs'],
+  doc_clerk: ['docs','workorder'],
+  doc_draft: ['docs','workorder'],   // BOW/TARN เห็นใบคำสั่งแบบอ่านอย่างเดียว
+  doc_wo: ['docs','workorder'],      // PLA แก้ใบคำสั่งได้
 };
 /* role ที่แก้ใบคำสั่งได้ */
 const canEditWO = () => (USER_ROLE==='admin' || USER_ROLE==='doc_wo');
@@ -783,6 +797,7 @@ function switchTab(name, el){
   if(name === 'dbvessel') loadDbVessel();
   if(name === 'cal') initCal();
   if(name === 'docs') initDocs();
+  if(name === 'workorder') initWorkOrderTab();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -878,19 +893,29 @@ function onDocInvChange(){
     warn.style.display='none';
   }
   loadDocList();
-  loadWorkOrder();
 }
 
 // ═══════════════════════════════════════════════════════════
-//  ใบคำสั่ง (work_orders)  — OAK/PLA แก้ได้ · BOW/TARN ดูอย่างเดียว
+//  ใบคำสั่ง (work_orders)  — แท็บแยก · OAK/PLA แก้ได้ · BOW/TARN ดูอย่างเดียว
 // ═══════════════════════════════════════════════════════════
-let _woData = null;
+let _woData = null, _woInit = false;
 const woH = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 /* เบอร์ตู้หลายบรรทัด → คั่นคอมม่าแนวนอน */
 const woCommas = s => String(s||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).join(', ');
 
+/* datalist อินวอยซ์ในแท็บใบคำสั่ง (ใช้ชุดเดียวกับหน้าเอกสาร) */
+async function initWorkOrderTab(){
+  if(_woInit) return; _woInit = true;
+  const dl = document.getElementById('woInvList');
+  try{
+    const cutoff = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+    const res = await sb.from('invoices').select('invoice_no,created_at').gte('created_at', cutoff).order('id',{ascending:false});
+    dl.innerHTML = (res.data||[]).map(r=>`<option value="${String(r.invoice_no).replace(/"/g,'&quot;')}"></option>`).join('');
+  }catch(e){}
+}
+
 async function loadWorkOrder(){
-  const inv = document.getElementById('docInv').value.trim();
+  const inv = document.getElementById('woInv').value.trim();
   const panel = document.getElementById('woPanel');
   if(!inv){ panel.style.display='none'; _woData=null; return; }
   panel.style.display='block';
@@ -942,7 +967,7 @@ function woCopyLine(){
 }
 async function saveWorkOrder(){
   if(!canEditWO()) return;
-  const inv = document.getElementById('docInv').value.trim();
+  const inv = document.getElementById('woInv').value.trim();
   const msg = document.getElementById('woMsg');
   if(!inv){ if(msg){msg.textContent='⚠️ เลือกอินวอยซ์ก่อน'; msg.style.color='#b45309';} return; }
   const payload = {
