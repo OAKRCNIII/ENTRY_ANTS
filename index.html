@@ -1200,25 +1200,29 @@ async function loadDocList(){
       const st = DOC_STAGES.find(s=>s.key===stage);
       const ver = n>1 ? ` <b style="font-size:9px;background:#fff;color:${st.color};border-radius:8px;padding:0 4px;">V.${n}</b>` : '';
       const lf = latestST[stage+'|'+t.key];
-      const click = has&&lf ? `onclick="openDoc('${lf.folder.replace(/'/g,"\\'")}','${lf.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')" title="คลิกเพื่อเปิด/โหลด"` : '';
-      return `<span ${click} style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`cursor:pointer;background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?'⬇️':'○'} ${st.label}${ver}</span>`;
+      const canDL = canEditWO();   /* โหลดได้เฉพาะ OAK/PLA */
+      const click = has&&lf&&canDL ? `onclick="openDoc('${lf.folder.replace(/'/g,"\\'")}','${lf.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')" title="คลิกเพื่อเปิด/โหลด"` : '';
+      const clickable = has&&canDL;
+      return `<span ${click} style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`${clickable?'cursor:pointer;':''}background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?(clickable?'⬇️':'✓'):'○'} ${st.label}${ver}</span>`;
     };
     return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;"><span style="min-width:110px;font-weight:700;color:#374151;">${t.label}</span>${mk('DRAFT')}${mk('FINAL')}</div>`;
   }).join('') + `</div>`;
-  /* ปุ่มโหลดรวม PDF เมื่อครบ 7 ต่อ stage (ตั้งชื่อเหมือน INDEX) */
+  /* ปุ่มโหลดรวม PDF เมื่อครบ 7 ต่อ stage — เฉพาะ OAK/PLA */
   const N = DOC_TYPES.length;
-  chkHtml += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">`;
-  DOC_STAGES.forEach(st=>{
-    const cnt = window._docMergeFiles[st.key].length;
-    const base = st.key==='DRAFT'?'#d97706':'#16a34a';
-    if(cnt>=N){
-      const fn = st.key==='DRAFT'?'โหลด DRAFT':'โหลดตั๋วตัวจริง';
-      chkHtml += `<button type="button" onclick="mergeDocsEntry('${st.key}')" style="padding:7px 15px;background:${base};border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">📑 ${fn} (รวม 7 หน้า)</button>`;
-    }else{
-      chkHtml += `<span style="font-size:10.5px;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e0;border-radius:8px;padding:6px 11px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label} ครบ ${cnt}/${N}</span>`;
-    }
-  });
-  chkHtml += `<span id="docMergeMsg" style="font-size:11px;color:#64748b;align-self:center;"></span></div>`;
+  if(canEditWO()){
+    chkHtml += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">`;
+    DOC_STAGES.forEach(st=>{
+      const cnt = window._docMergeFiles[st.key].length;
+      const base = st.key==='DRAFT'?'#d97706':'#16a34a';
+      if(cnt>=N){
+        const fn = st.key==='DRAFT'?'โหลด DRAFT':'โหลดตั๋วตัวจริง';
+        chkHtml += `<button type="button" onclick="mergeDocsEntry('${st.key}')" style="padding:7px 15px;background:${base};border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">📑 ${fn} (รวม 7 หน้า)</button>`;
+      }else{
+        chkHtml += `<span style="font-size:10.5px;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e0;border-radius:8px;padding:6px 11px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label} ครบ ${cnt}/${N}</span>`;
+      }
+    });
+    chkHtml += `<span id="docMergeMsg" style="font-size:11px;color:#64748b;align-self:center;"></span></div>`;
+  }
   chk.innerHTML = chkHtml;
   cnt.textContent = all.length + ' ไฟล์';
   if(!all.length){ tb.innerHTML='<tr><td colspan="7" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
@@ -1245,7 +1249,7 @@ async function loadDocList(){
       <td>${dt}</td>
       <td><span style="font-size:11px;font-weight:700;color:#0e7490;">👤 ${uploaderMap[f.stage+'/'+f.dtype+'|'+f.name]||uploaderMap[f.dtype+'|'+f.name]||'-'}</span></td>
       <td style="white-space:nowrap;">
-        <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${folderEsc}','${nameEsc}')">⬇️ เปิด/โหลด</button>
+        ${canEditWO()?`<button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${folderEsc}','${nameEsc}')">⬇️ เปิด/โหลด</button>`:'<span style="font-size:10px;color:#94a3b8;">—</span>'}
         ${isDraftOnly()?'':`<button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${folderEsc}','${nameEsc}','${f.stage}/${f.dtype}')">🗑️</button>`}
       </td>
     </tr>`;
