@@ -937,6 +937,53 @@ async function uploadDocs(){
   }
 }
 
+/* โหลด pdf-lib (lazy) แล้ว merge ไฟล์ล่าสุดของ stage → ดาวน์โหลด (ชื่อเหมือน INDEX) */
+function _entLoadPdfLib(){
+  return new Promise((res,rej)=>{
+    if(window.PDFLib)return res();
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+    s.onload=()=>res(); s.onerror=()=>rej(new Error('โหลด pdf-lib ไม่สำเร็จ'));
+    document.head.appendChild(s);
+  });
+}
+async function mergeDocsEntry(stage){
+  const data = window._docMergeFiles;
+  const msg = document.getElementById('docMergeMsg');
+  if(!data || !data[stage] || !data[stage].length){ if(msg)msg.textContent='ไม่มีไฟล์'; return; }
+  const inv = data.inv;
+  const suffix = stage==='DRAFT' ? '_DRAFT' : '_ORIGINAL';
+  try{
+    if(msg){msg.textContent='⏳ กำลังรวมไฟล์...'; msg.style.color='#64748b';}
+    await _entLoadPdfLib();
+    const {PDFDocument} = window.PDFLib;
+    const out = await PDFDocument.create();
+    for(const f of data[stage]){
+      if(msg)msg.textContent=`⏳ รวม ${f.label}...`;
+      const {data:sd, error} = await sb.storage.from('invoice_docs').createSignedUrl(f.folder+'/'+f.name, 3600);
+      if(error||!sd) continue;
+      const bytes = await (await fetch(sd.signedUrl)).arrayBuffer();
+      if(/\.pdf$/i.test(f.name)){
+        const src = await PDFDocument.load(bytes,{ignoreEncryption:true});
+        (await out.copyPages(src, src.getPageIndices())).forEach(p=>out.addPage(p));
+      }else{
+        let img; try{img=await out.embedJpg(bytes);}catch(e){img=await out.embedPng(bytes);}
+        const A4W=595.28,A4H=841.89,M=24;
+        const page=out.addPage([A4W,A4H]);
+        const sc=Math.min((A4W-M*2)/img.width,(A4H-M*2)/img.height);
+        page.drawImage(img,{x:(A4W-img.width*sc)/2,y:(A4H-img.height*sc)/2,width:img.width*sc,height:img.height*sc});
+      }
+    }
+    const blob = new Blob([await out.save()],{type:'application/pdf'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=docSafe(inv)+suffix+'.pdf'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+    if(msg){msg.textContent='✅ ดาวน์โหลด '+docSafe(inv)+suffix+'.pdf แล้ว'; msg.style.color='#15803d';}
+  }catch(e){
+    console.error('mergeDocsEntry',e);
+    if(msg){msg.textContent='⚠️ '+(e.message||'รวมไฟล์ไม่สำเร็จ'); msg.style.color='#b45309';}
+  }
+}
+
 async function loadDocList(){
   const inv = document.getElementById('docInv').value;
   const tb = document.getElementById('docTbody');
@@ -961,8 +1008,13 @@ async function loadDocList(){
   const uploaderMap = {};
   logRes.forEach(l=>{ const k=l.doc_type+'|'+l.file_name; if(!(k in uploaderMap)) uploaderMap[k]=l.uploaded_by; });
   const all = jobRes.flatMap(r=>r.files.map(f=>({...f, stage:r.stage, dtype:r.type, folder:r.folder})));
+  /* เก็บไฟล์ล่าสุดต่อ (stage,type) ไว้ merge PDF */
+  const latestST = {};
+  all.forEach(f=>{ const k=f.stage+'|'+f.dtype; if(!latestST[k]||String(f.created_at)>String(latestST[k].created_at)) latestST[k]=f; });
+  window._docMergeFiles = {inv, DRAFT:[], FINAL:[]};
+  DOC_STAGES.forEach(st=>DOC_TYPES.forEach(t=>{ const f=latestST[st.key+'|'+t.key]; if(f) window._docMergeFiles[st.key].push({folder:f.folder,name:f.name,label:t.label}); }));
   /* checklist: ต่อประเภท โชว์ draft + จริง */
-  chk.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;width:100%;">` + DOC_TYPES.map(t=>{
+  let chkHtml = `<div style="display:flex;flex-direction:column;gap:4px;width:100%;">` + DOC_TYPES.map(t=>{
     const mk = stage => {
       const has = all.some(f=>f.dtype===t.key && f.stage===stage);
       const st = DOC_STAGES.find(s=>s.key===stage);
@@ -970,6 +1022,21 @@ async function loadDocList(){
     };
     return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;"><span style="min-width:110px;font-weight:700;color:#374151;">${t.label}</span>${mk('DRAFT')}${mk('FINAL')}</div>`;
   }).join('') + `</div>`;
+  /* ปุ่มโหลดรวม PDF เมื่อครบ 7 ต่อ stage (ตั้งชื่อเหมือน INDEX) */
+  const N = DOC_TYPES.length;
+  chkHtml += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">`;
+  DOC_STAGES.forEach(st=>{
+    const cnt = window._docMergeFiles[st.key].length;
+    const base = st.key==='DRAFT'?'#d97706':'#16a34a';
+    if(cnt>=N){
+      const fn = st.key==='DRAFT'?'โหลด DRAFT':'โหลดตั๋วตัวจริง';
+      chkHtml += `<button type="button" onclick="mergeDocsEntry('${st.key}')" style="padding:7px 15px;background:${base};border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">📑 ${fn} (รวม 7 หน้า)</button>`;
+    }else{
+      chkHtml += `<span style="font-size:10.5px;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e0;border-radius:8px;padding:6px 11px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label} ครบ ${cnt}/${N}</span>`;
+    }
+  });
+  chkHtml += `<span id="docMergeMsg" style="font-size:11px;color:#64748b;align-self:center;"></span></div>`;
+  chk.innerHTML = chkHtml;
   cnt.textContent = all.length + ' ไฟล์';
   if(!all.length){ tb.innerHTML='<tr><td colspan="7" class="empty" style="padding:18px;">ยังไม่มีเอกสาร</td></tr>'; return; }
   const fmSize = n => n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
