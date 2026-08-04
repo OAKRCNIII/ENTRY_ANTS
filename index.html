@@ -1248,6 +1248,32 @@ async function mergeDocsEntry(stage){
   }
 }
 
+/* APPROVE / REJECT เอกสาร DRAFT (เฉพาะ OAK/PLA) */
+async function reviewDoc(type, status){
+  if(!canEditWO()) return;
+  const inv = window._docReviewInv || document.getElementById('docInv').value.trim();
+  if(!inv) return;
+  const lf = window._docMergeFiles && window._docMergeFiles.DRAFT.find(f=>f.label===docTypeLabel(type));
+  const rvState = window._docDraftReview ? window._docDraftReview(type) : {};
+  const fileName = (rvState && rvState.__file) || null;
+  /* หาไฟล์ล่าสุดของ DRAFT/type จาก storage */
+  const list = (await sb.storage.from('invoice_docs').list(docSafe(inv)+'/DRAFT/'+type,{limit:100,sortBy:{column:'created_at',order:'desc'}})).data||[];
+  const latest = list.filter(f=>f.name&&!f.name.startsWith('.'))[0];
+  if(!latest){ alert('ยังไม่มีไฟล์ DRAFT ของประเภทนี้'); return; }
+  let reason = null;
+  if(status==='rejected'){
+    reason = prompt('❌ ตีกลับ '+docTypeLabel(type)+' — ใส่เหตุผล (เช่น เอาผิดใบ/เที่ยว):');
+    if(reason===null) return;               // กดยกเลิก
+    if(!reason.trim()){ alert('กรุณาใส่เหตุผลการตีกลับ'); return; }
+  }
+  const { error } = await sb.from('doc_reviews').upsert({
+    invoice_no:inv, doc_type:type, status, reason:reason?reason.trim():null,
+    file_name:latest.name, reviewed_by:LOGGED_USER||'?', reviewed_at:new Date().toISOString(),
+  }, { onConflict:'invoice_no,doc_type' });
+  if(error){ alert('บันทึกไม่สำเร็จ: '+error.message); return; }
+  loadDocList();
+}
+
 async function loadDocList(){
   const inv = document.getElementById('docInv').value;
   const tb = document.getElementById('docTbody');
@@ -1265,9 +1291,10 @@ async function loadDocList(){
       );
     });
   }));
-  const [jobRes, logRes] = await Promise.all([
+  const [jobRes, logRes, revRes] = await Promise.all([
     Promise.all(jobs),
-    sb.from('doc_upload_log').select('doc_type,file_name,uploaded_by').eq('invoice_no',inv).eq('action','upload').order('id',{ascending:false}).limit(500).then(r=>r.data||[], ()=>[])
+    sb.from('doc_upload_log').select('doc_type,file_name,uploaded_by').eq('invoice_no',inv).eq('action','upload').order('id',{ascending:false}).limit(500).then(r=>r.data||[], ()=>[]),
+    sb.from('doc_reviews').select('*').eq('invoice_no',inv).then(r=>r.data||[], ()=>[])
   ]);
   const uploaderMap = {};
   logRes.forEach(l=>{ const k=l.doc_type+'|'+l.file_name; if(!(k in uploaderMap)) uploaderMap[k]=l.uploaded_by; });
@@ -1277,6 +1304,19 @@ async function loadDocList(){
   all.forEach(f=>{ const k=f.stage+'|'+f.dtype; if(!latestST[k]||String(f.created_at)>String(latestST[k].created_at)) latestST[k]=f; });
   window._docMergeFiles = {inv, DRAFT:[], FINAL:[]};
   DOC_STAGES.forEach(st=>DOC_TYPES.forEach(t=>{ const f=latestST[st.key+'|'+t.key]; if(f) window._docMergeFiles[st.key].push({folder:f.folder,name:f.name,label:t.label}); }));
+  /* สถานะตรวจ DRAFT ต่อประเภท (ผูกกับชื่อไฟล์ล่าสุด — อัพใหม่ = ตรวจใหม่) */
+  const revMap = {}; revRes.forEach(r=>revMap[r.doc_type]=r);
+  const draftReview = type => {
+    const lf = latestST['DRAFT|'+type];
+    if(!lf) return {state:'none'};
+    const rv = revMap[type];
+    if(rv && rv.file_name===lf.name) return {state:rv.status, reason:rv.reason, by:rv.reviewed_by};
+    return {state:'pending'};
+  };
+  window._docDraftReview = draftReview;
+  window._docReviewInv = inv;
+  /* approve ครบ 7 ไหม (ปลดล็อกโหลด DRAFT ครบชุด) */
+  window._docDraftAllApproved = DOC_TYPES.every(t=>draftReview(t.key).state==='approved');
   /* checklist: ต่อประเภท โชว์ draft + จริง */
   let chkHtml = `<div style="display:flex;flex-direction:column;gap:4px;width:100%;">` + DOC_TYPES.map(t=>{
     const mk = stage => {
@@ -1290,7 +1330,18 @@ async function loadDocList(){
       const clickable = has&&canDL;
       return `<span ${click} style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`${clickable?'cursor:pointer;':''}background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?(clickable?'⬇️':'✓'):'○'} ${st.label}${ver}</span>`;
     };
-    return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;"><span style="min-width:110px;font-weight:700;color:#374151;">${t.label}</span>${mk('DRAFT')}${mk('FINAL')}</div>`;
+    /* สถานะตรวจ + ปุ่ม approve/reject (DRAFT เท่านั้น) */
+    const rv = draftReview(t.key);
+    let revUI = '';
+    if(rv.state!=='none'){
+      if(rv.state==='approved') revUI=`<span style="font-size:10px;font-weight:700;color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:2px 8px;">✅ ผ่าน${rv.by?' · '+woH(rv.by):''}</span>`;
+      else if(rv.state==='rejected') revUI=`<span title="${woH(rv.reason||'')}" style="font-size:10px;font-weight:700;color:#b91c1c;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:2px 8px;">✗ ตีกลับ${rv.reason?': '+woH(rv.reason).slice(0,30):''}</span>`;
+      else revUI=`<span style="font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:2px 8px;">⏳ รอตรวจ</span>`;
+      if(canEditWO()){
+        revUI+=`<button type="button" onclick="reviewDoc('${t.key}','approved')" title="อนุมัติ" style="border:none;background:#16a34a;color:#fff;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;">✅</button><button type="button" onclick="reviewDoc('${t.key}','rejected')" title="ตีกลับ" style="border:none;background:#dc2626;color:#fff;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;">❌</button>`;
+      }
+    }
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;flex-wrap:wrap;"><span style="min-width:110px;font-weight:700;color:#374151;">${t.label}</span>${mk('DRAFT')}${mk('FINAL')}${revUI?'<span style="width:8px;"></span>'+revUI:''}</div>`;
   }).join('') + `</div>`;
   /* ปุ่มโหลดรวม PDF เมื่อครบ 7 ต่อ stage — เฉพาะ OAK/PLA */
   const N = DOC_TYPES.length;
@@ -1299,11 +1350,16 @@ async function loadDocList(){
     DOC_STAGES.forEach(st=>{
       const cnt = window._docMergeFiles[st.key].length;
       const base = st.key==='DRAFT'?'#d97706':'#16a34a';
-      if(cnt>=N){
+      const approvedN = st.key==='DRAFT' ? DOC_TYPES.filter(t=>draftReview(t.key).state==='approved').length : N;
+      const needApprove = st.key==='DRAFT';
+      const ready = cnt>=N && (!needApprove || window._docDraftAllApproved);
+      if(ready){
         const fn = st.key==='DRAFT'?'โหลด DRAFT':'โหลดตั๋วตัวจริง';
         chkHtml += `<button type="button" onclick="mergeDocsEntry('${st.key}')" style="padding:7px 15px;background:${base};border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">📑 ${fn} (รวม 7 หน้า)</button>`;
-      }else{
+      }else if(cnt<N){
         chkHtml += `<span style="font-size:10.5px;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e0;border-radius:8px;padding:6px 11px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label} ครบ ${cnt}/${N}</span>`;
+      }else{
+        chkHtml += `<span style="font-size:10.5px;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 11px;">🔒 ${st.label} — รอ APPROVE ครบ (${approvedN}/${N})</span>`;
       }
     });
     chkHtml += `<span id="docMergeMsg" style="font-size:11px;color:#64748b;align-self:center;"></span></div>`;
