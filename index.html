@@ -1277,9 +1277,9 @@ async function reviewDoc(type, status){
   }
   let reason = null;
   if(status==='rejected'){
-    reason = prompt('❌ ตีกลับ '+docTypeLabel(type)+' — ใส่เหตุผล (เช่น เอาผิดใบ/เที่ยว):');
-    if(reason===null) return;               // กดยกเลิก
-    if(!reason.trim()){ alert('กรุณาใส่เหตุผลการตีกลับ'); return; }
+    reason = prompt('❌ ตีกลับ '+docTypeLabel(type)+' — ใส่เหตุผล (จะใส่หรือไม่ใส่ก็ได้):');
+    if(reason===null) return;               // กดยกเลิก = ไม่ตีกลับ
+    /* ปล่อยว่างได้ — ไม่บังคับเหตุผล */
   }
   const { error } = await sb.from('doc_reviews').upsert({
     invoice_no:inv, doc_type:type, status, reason:reason?reason.trim():null,
@@ -1743,7 +1743,7 @@ function initApp(){
 //    reviewer (OAK/PLA) → มีอัพเอกสาร DRAFT ใหม่ให้ตรวจ
 //    uploader (BOW/TARN) → เอกสารที่ตัวเองอัพ โดน APPROVE/REJECT
 // ═══════════════════════════════════════════════════════════
-let _bellEvents = [], _bellPollTimer = null, _bellOutsideBound = false;
+let _bellEvents = [], _bellPollTimer = null, _bellOutsideBound = false, _bellChannel = null;
 const bellMode = () => canEditWO() ? 'reviewer' : (USER_ROLE==='doc_draft' ? 'uploader' : null);
 const bellSeenKey = () => 'ants_bell_seen_' + (LOGGED_USER||'?');
 const bellGetSeen = () => localStorage.getItem(bellSeenKey()) || '';
@@ -1790,6 +1790,13 @@ function bellUpdateBadge(){
 async function bellRefresh(){
   _bellEvents = await bellFetch();
   bellUpdateBadge();
+}
+/* มี event realtime เข้า → รีเฟรชทันที + ถ้าเปิดกล่องอยู่ก็วาดใหม่ */
+function bellRealtimeHit(){
+  bellRefresh().then(()=>{
+    const d=document.getElementById('bellDrop');
+    if(d && d.style.display==='block') bellRenderList();
+  });
 }
 function bellRenderList(){
   const seen = bellGetSeen();
@@ -1844,8 +1851,17 @@ function bellInit(){
   wrap.style.display='inline-flex';
   if(!localStorage.getItem(bellSeenKey())) bellSetSeen(new Date().toISOString()); /* ครั้งแรก: ไม่ท่วมด้วยประวัติเก่า */
   bellRefresh();
+  /* ── Realtime: เด้งทันทีเมื่อมีอัพเอกสาร/ตรวจเอกสาร (ไม่ต้องรอ poll) ── */
+  try{
+    if(_bellChannel){ sb.removeChannel(_bellChannel); _bellChannel=null; }
+    _bellChannel = sb.channel('bell_'+(LOGGED_USER||'x'))
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'doc_upload_log'}, bellRealtimeHit)
+      .on('postgres_changes', {event:'*',      schema:'public', table:'doc_reviews'},    bellRealtimeHit)
+      .subscribe();
+  }catch(e){ /* ถ้า realtime ใช้ไม่ได้ ยังมี poll สำรอง */ }
+  /* poll สำรอง (เผื่อ realtime ไม่ได้เปิดใน Supabase) */
   if(_bellPollTimer) clearInterval(_bellPollTimer);
-  _bellPollTimer = setInterval(bellRefresh, 60000);
+  _bellPollTimer = setInterval(bellRefresh, 45000);
   if(!_bellOutsideBound){
     _bellOutsideBound = true;
     document.addEventListener('click', ev=>{
