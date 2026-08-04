@@ -300,6 +300,10 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
       </div>
     </div>
     <div class="header-right">
+      <div id="bellWrap" style="position:relative;display:none;align-items:center;">
+        <button class="hbtn" id="bellBtn" onclick="bellToggle()" title="การแจ้งเตือน" style="position:relative;">🔔<span id="bellBadge" style="display:none;position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 3px;background:#dc2626;color:#fff;border-radius:9px;font-size:10px;font-weight:800;align-items:center;justify-content:center;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.3);">0</span></button>
+        <div id="bellDrop" style="display:none;position:absolute;top:calc(100% + 6px);right:0;width:330px;max-height:420px;overflow-y:auto;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);z-index:1000;text-align:left;"></div>
+      </div>
       <span id="userChip"></span>
       <button class="hbtn" id="refreshBtn" onclick="forceRefresh()" title="โหลดข้อมูลใหม่จาก Supabase">🔄 รีเฟรช</button>
       <a class="hbtn" id="dashLinkBtn" href="index.html" target="_blank">📊 Dashboard</a>
@@ -1733,6 +1737,124 @@ function initApp(){
   loadStmt();
   loadVessels();
   loadPendingData();
+  bellInit();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  🔔 กระดิ่งแจ้งเตือน
+//    reviewer (OAK/PLA) → มีอัพเอกสาร DRAFT ใหม่ให้ตรวจ
+//    uploader (BOW/TARN) → เอกสารที่ตัวเองอัพ โดน APPROVE/REJECT
+// ═══════════════════════════════════════════════════════════
+let _bellEvents = [], _bellPollTimer = null, _bellOutsideBound = false;
+const bellMode = () => canEditWO() ? 'reviewer' : (USER_ROLE==='doc_draft' ? 'uploader' : null);
+const bellSeenKey = () => 'ants_bell_seen_' + (LOGGED_USER||'?');
+const bellGetSeen = () => localStorage.getItem(bellSeenKey()) || '';
+const bellSetSeen = ts => { if(ts) localStorage.setItem(bellSeenKey(), String(ts)); };
+
+async function bellFetch(){
+  const mode = bellMode();
+  if(!mode) return [];
+  try{
+    if(mode==='reviewer'){
+      const { data } = await sb.from('doc_upload_log')
+        .select('invoice_no,doc_type,file_name,uploaded_by,created_at')
+        .eq('action','upload').like('doc_type','DRAFT/%')
+        .order('id',{ascending:false}).limit(120);
+      return (data||[])
+        .filter(r=>r.uploaded_by!==LOGGED_USER)
+        .map(r=>({kind:'upload', ts:r.created_at, inv:r.invoice_no,
+                  type:String(r.doc_type||'').replace(/^DRAFT\//,''), who:r.uploaded_by}));
+    } else {
+      const [upRes, rvRes] = await Promise.all([
+        sb.from('doc_upload_log').select('file_name').eq('action','upload').eq('uploaded_by',LOGGED_USER).limit(600),
+        sb.from('doc_reviews').select('*').order('reviewed_at',{ascending:false}).limit(200)
+      ]);
+      const mine = new Set((upRes.data||[]).map(u=>u.file_name));
+      return (rvRes.data||[])
+        .filter(r=>r.file_name && mine.has(r.file_name))
+        .map(r=>({kind:'review', ts:r.reviewed_at, inv:r.invoice_no, type:r.doc_type,
+                  status:r.status, reason:r.reason, by:r.reviewed_by}));
+    }
+  }catch(e){ return []; }
+}
+
+function bellUnread(){
+  const seen = bellGetSeen();
+  return _bellEvents.filter(e=>e.ts && String(e.ts)>seen).length;
+}
+function bellUpdateBadge(){
+  const b = document.getElementById('bellBadge');
+  if(!b) return;
+  const n = bellUnread();
+  b.textContent = n>9 ? '9+' : String(n);
+  b.style.display = n>0 ? 'flex' : 'none';
+}
+async function bellRefresh(){
+  _bellEvents = await bellFetch();
+  bellUpdateBadge();
+}
+function bellRenderList(){
+  const seen = bellGetSeen();
+  const drop = document.getElementById('bellDrop');
+  if(!drop) return;
+  if(!_bellEvents.length){
+    drop.innerHTML = '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:12px;">— ไม่มีการแจ้งเตือน —</div>';
+    return;
+  }
+  const fmt = ts => { const d=new Date(ts); return isNaN(d)?'':d.toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); };
+  const lbl = ty => (DOC_TYPES.find(t=>t.key===ty)||{}).label || ty;
+  drop.innerHTML =
+    `<div style="padding:9px 12px;font-size:11px;font-weight:800;color:#64748b;border-bottom:2px solid #eef2f6;background:#f8fafc;border-radius:10px 10px 0 0;">🔔 การแจ้งเตือน</div>` +
+    _bellEvents.slice(0,40).map(e=>{
+      const fresh = e.ts && String(e.ts)>seen;
+      let line;
+      if(e.kind==='upload'){
+        line = `<div style="font-size:12px;font-weight:700;color:#1e293b;">📎 อัพเอกสารใหม่ · ${woH(lbl(e.type))}</div>
+                <div style="font-size:11px;color:#64748b;">อินวอยซ์ <b>${woH(e.inv)}</b>${e.who?' · โดย '+woH(e.who):''}</div>`;
+      } else {
+        const ok = e.status==='approved';
+        line = `<div style="font-size:12px;font-weight:700;color:${ok?'#166534':'#b91c1c'};">${ok?'✅ APPROVED':'✗ REJECTED — กรุณาอัพเอกสารใหม่'} · ${woH(lbl(e.type))}</div>
+                <div style="font-size:11px;color:#64748b;">อินวอยซ์ <b>${woH(e.inv)}</b>${!ok&&e.reason?' · เหตุผล: '+woH(e.reason):''}</div>`;
+      }
+      return `<div onclick="bellGo('${String(e.inv).replace(/'/g,"\\'")}')" style="cursor:pointer;padding:9px 12px;border-bottom:1px solid #f1f5f9;${fresh?'background:#fffbeb;':''}" onmouseover="this.style.background='#f1f5f9';" onmouseout="this.style.background='${fresh?'#fffbeb':'#fff'}';">
+        ${line}<div style="font-size:10px;color:#c2ccd6;margin-top:2px;">${fmt(e.ts)}</div></div>`;
+    }).join('');
+}
+function bellToggle(){
+  const drop = document.getElementById('bellDrop');
+  if(!drop) return;
+  if(drop.style.display==='block'){ drop.style.display='none'; return; }
+  bellRenderList();
+  drop.style.display='block';
+  /* เปิดอ่าน = ถือว่าเห็นทั้งหมด → เคลียร์ตัวเลข */
+  const newest = _bellEvents.reduce((m,e)=>(e.ts&&String(e.ts)>m)?String(e.ts):m, bellGetSeen());
+  bellSetSeen(newest);
+  bellUpdateBadge();
+  bellRefresh().then(()=>{ if(drop.style.display==='block') bellRenderList(); });
+}
+function bellGo(inv){
+  const drop=document.getElementById('bellDrop'); if(drop) drop.style.display='none';
+  const tab = document.querySelector(".tab[onclick*=\"switchTab('docs'\"]");
+  if(tab) switchTab('docs', tab);
+  const el = document.getElementById('docInv');
+  if(el){ el.value = inv; onDocInvChange(); }
+}
+function bellInit(){
+  const wrap = document.getElementById('bellWrap');
+  if(!wrap) return;
+  if(!bellMode()){ wrap.style.display='none'; return; }
+  wrap.style.display='inline-flex';
+  if(!localStorage.getItem(bellSeenKey())) bellSetSeen(new Date().toISOString()); /* ครั้งแรก: ไม่ท่วมด้วยประวัติเก่า */
+  bellRefresh();
+  if(_bellPollTimer) clearInterval(_bellPollTimer);
+  _bellPollTimer = setInterval(bellRefresh, 60000);
+  if(!_bellOutsideBound){
+    _bellOutsideBound = true;
+    document.addEventListener('click', ev=>{
+      const w=document.getElementById('bellWrap'), d=document.getElementById('bellDrop');
+      if(w && d && !w.contains(ev.target)) d.style.display='none';
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
