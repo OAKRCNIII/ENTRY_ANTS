@@ -599,6 +599,8 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
           <datalist id="docInvList"></datalist>
           <div id="docInvWarn" style="display:none;font-size:12px;font-weight:700;color:#dc2626;margin-top:7px;">⚠️ กรุณากรอก/เลือกอินวอยซ์ก่อนอัพโหลด</div>
         </div>
+        <!-- ใบคำสั่ง (อ่านอย่างเดียว) โผล่ในหน้าเอกสารเมื่อเลือกอินวอยซ์ -->
+        <div id="docWoView" style="display:none;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:12px 16px;margin-bottom:14px;"></div>
         <!-- 2 ส่วน: DRAFT + ตั๋วตัวจริง — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
         <div id="docSlotsWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;"></div>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
@@ -893,6 +895,38 @@ function onDocInvChange(){
     warn.style.display='none';
   }
   loadDocList();
+  showDocWoView();
+}
+
+/* ใบคำสั่ง (อ่านอย่างเดียว) ในหน้าเอกสาร */
+async function showDocWoView(){
+  const inv = document.getElementById('docInv').value.trim();
+  const box = document.getElementById('docWoView');
+  if(!box) return;
+  if(!inv){ box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML='<div style="font-size:12px;color:#64748b;">⏳ ...</div>';
+  const { data, error } = await sb.from('work_orders').select('*').eq('invoice_no', inv).maybeSingle();
+  if(error && (error.code==='PGRST205' || /work_orders/.test(error.message||''))){ box.style.display='none'; return; }
+  if(!data){
+    box.innerHTML=`<div style="font-size:12.5px;font-weight:700;color:#b45309;">📋 ยังไม่มีใบคำสั่งของอินวอยซ์นี้</div>`;
+    return;
+  }
+  const d=data, cell=(lb,v)=>v?`<div><span style="color:#64748b;">${lb}:</span> <b style="color:#1e293b;">${woH(v)}</b></div>`:'';
+  const ctrLine=woCommas(d.containers);
+  box.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="font-size:12.5px;font-weight:800;color:#1e40af;">📋 ใบคำสั่ง</span><span style="font-size:10px;color:#64748b;background:#e2e8f0;border-radius:8px;padding:1px 8px;">อ่านอย่างเดียว · แก้ที่แท็บ ใบคำสั่ง</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;font-size:12px;">
+      ${cell('วันที่อินวอยซ์',d.invoice_date)}
+      ${cell('CONSIGNEE',d.consignee?String(d.consignee).replace(/\n/g,' / '):'')}
+      ${cell('ชื่อเรือ',d.vessel_name)}
+      ${cell('วันที่เรือ',d.vessel_date)}
+      ${cell('NW',d.nw)}
+      ${cell('GW',d.gw)}
+      ${cell('M3',d.show_m3?'โชว์':'ไม่โชว์')}
+    </div>
+    ${ctrLine?`<div style="margin-top:6px;font-size:12px;"><span style="color:#64748b;">เบอร์ตู้:</span> <span style="display:flex;gap:6px;align-items:center;margin-top:3px;"><input readonly value="${woH(ctrLine)}" style="flex:1;padding:5px 8px;border:1.5px solid #bfdbfe;border-radius:7px;font-family:monospace;font-size:12px;background:#f8fafc;"><button type="button" onclick="(function(){const i=this.previousElementSibling;i.select();document.execCommand('copy');navigator.clipboard&&navigator.clipboard.writeText(i.value)}).call(this)" style="padding:0 10px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:7px;cursor:pointer;font-size:11px;font-weight:700;">📋</button></span></div>`:''}
+  `;
 }
 
 // ═══════════════════════════════════════════════════════════
