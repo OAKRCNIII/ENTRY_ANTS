@@ -1253,6 +1253,10 @@ async function reviewDoc(type, status){
   if(!canEditWO()) return;
   const inv = window._docReviewInv || document.getElementById('docInv').value.trim();
   if(!inv) return;
+  /* รหัสยืนยันก่อนตรวจเอกสาร */
+  const _pin = prompt('🔒 ใส่รหัสยืนยันเพื่อ '+(status==='approved'?'✅ อนุมัติ':'✗ ตีกลับ')+' '+docTypeLabel(type)+':');
+  if(_pin===null) return;
+  if(_pin.trim()!=='2026'){ alert('รหัสไม่ถูกต้อง'); return; }
   const lf = window._docMergeFiles && window._docMergeFiles.DRAFT.find(f=>f.label===docTypeLabel(type));
   const rvState = window._docDraftReview ? window._docDraftReview(type) : {};
   const fileName = (rvState && rvState.__file) || null;
