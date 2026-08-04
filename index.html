@@ -680,13 +680,14 @@ const _CREDS = [
   {user:'DOC_THIRA',  hash:'63162c7482c634ef500b86969ad61af159550e3c441c0d2d4be44bab08553921', role:'doc_clerk'},
   {user:'TARN_ANTS',  hash:'397f493666309dc1ed7b987b4eeaf66de187af201a8387cfe8e25c1f909d06f0', role:'doc_draft'},
   {user:'BOW_ANTS',   hash:'43151a6c0190522a62a4625dbfe41e7e9b5e810adab3af286ffeefa761e87fd0', role:'doc_draft'},
+  {user:'PLA_ANTS',   hash:'4eb57a309e9e3c5384abb29d538d7356094d07c64e0c79fd2ac0c83eb6839aef', role:'doc_draft'},
 ];
 /* tabs ที่แต่ละ role มีสิทธิ์เห็น (ไม่ระบุ = เห็นทั้งหมด)
    1. OAK_THIRA (admin)          → ทุกแท็บ
    2. SU_THIRA (su_clerk)        → SU Statement เท่านั้น
    3. ANTS_THIRA (vessel_mgr)    → จัดเรือ + ปฏิทินเรือ
    4. DOC_THIRA (doc_clerk)      → เอกสาร (DRAFT + ตัวจริง)
-   5. TARN/BOW_ANTS (doc_draft)  → เอกสาร (อัพได้เฉพาะ DRAFT) */
+   5. TARN/BOW/PLA_ANTS (doc_draft) → เอกสาร (อัพได้เฉพาะ DRAFT) */
 const ROLE_TABS = {
   su_clerk: ['stmt'],
   vessel_manager: ['vessel','cal'],
