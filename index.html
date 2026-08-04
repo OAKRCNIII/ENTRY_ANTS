@@ -262,9 +262,9 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
 <!-- ═══════════ PASSWORD MODAL ═══════════ -->
 <div id="pwModal">
   <div class="pw-card">
-    <div class="pw-icon">🔐</div>
-    <div class="pw-title">ยืนยันการแก้ไข</div>
-    <div class="pw-sub">กรุณาใส่รหัสผ่านก่อนบันทึก/ลบข้อมูล</div>
+    <div class="pw-icon" id="pwIconEl">🔐</div>
+    <div class="pw-title" id="pwTitle">ยืนยันการแก้ไข</div>
+    <div class="pw-sub" id="pwSub">กรุณาใส่รหัสผ่านก่อนบันทึก/ลบข้อมูล</div>
     <input class="pw-inp" id="pwInput" type="password" maxlength="10" placeholder="••••••"
       onkeydown="if(event.key==='Enter')pwConfirm()">
     <div class="pw-err" id="pwErr"></div>
@@ -1257,20 +1257,20 @@ async function reviewDoc(type, status){
   if(!canEditWO()) return;
   const inv = window._docReviewInv || document.getElementById('docInv').value.trim();
   if(!inv) return;
-  /* รหัสยืนยันก่อนตรวจเอกสาร */
-  const _pin = prompt('🔒 ใส่รหัสยืนยันเพื่อ '+(status==='approved'?'✅ อนุมัติ':'✗ ตีกลับ')+' '+docTypeLabel(type)+':');
-  if(_pin===null) return;
-  if(_pin.trim()!=='2026'){ alert('รหัสไม่ถูกต้อง'); return; }
-  const lf = window._docMergeFiles && window._docMergeFiles.DRAFT.find(f=>f.label===docTypeLabel(type));
   const rvState = window._docDraftReview ? window._docDraftReview(type) : {};
-  const fileName = (rvState && rvState.__file) || null;
   /* หาไฟล์ล่าสุดของ DRAFT/type จาก storage */
   const list = (await sb.storage.from('invoice_docs').list(docSafe(inv)+'/DRAFT/'+type,{limit:100,sortBy:{column:'created_at',order:'desc'}})).data||[];
   const latest = list.filter(f=>f.name&&!f.name.startsWith('.'))[0];
   if(!latest){ alert('ยังไม่มีไฟล์ DRAFT ของประเภทนี้'); return; }
-  /* กดสถานะเดิมซ้ำ = ยกเลิก (ลบแถวรีวิว → กลับเป็นรอตรวจ) */
-  if(rvState && rvState.state===status){
-    if(!confirm('ยกเลิกสถานะ "'+(status==='approved'?'✅ ผ่าน':'✗ ตีกลับ')+'" ของ '+docTypeLabel(type)+' ?')) return;
+  const isCancel = rvState && rvState.state===status;   /* กดสถานะเดิมซ้ำ = ยกเลิก */
+  /* รหัสยืนยัน (modal สวย) */
+  const _title = isCancel ? 'ยกเลิกสถานะการตรวจ'
+               : (status==='approved' ? 'ยืนยันการอนุมัติเอกสาร' : 'ยืนยันการตีกลับเอกสาร');
+  const _sub = (isCancel ? 'กลับเป็น "รอตรวจ" · ' : '')+docTypeLabel(type)+' — ใส่รหัสยืนยัน';
+  const _icon = isCancel ? '↩️' : (status==='approved' ? '✅' : '⛔');
+  if(!await requirePin('2026', {title:_title, sub:_sub, icon:_icon})) return;
+  /* ยกเลิก → ลบแถวรีวิว */
+  if(isCancel){
     const { error:delErr } = await sb.from('doc_reviews').delete().eq('invoice_no',inv).eq('doc_type',type);
     if(delErr){ alert('ยกเลิกไม่สำเร็จ: '+delErr.message); return; }
     loadDocList(); return;
@@ -1430,9 +1430,7 @@ async function openDoc(folder, name){
 const _DOC_DEL_PIN = '625465'; /* รหัสเดียวกับ PIN ยืนยันใน Dashboard หลัก */
 async function deleteDoc(folder, name, logType){
   const inv = document.getElementById('docInv').value;
-  const pin = prompt('🔐 ใส่รหัสเพื่อยืนยันการลบไฟล์\n"'+name+'"');
-  if(pin === null) return; /* กดยกเลิก */
-  if(pin !== _DOC_DEL_PIN){ alert('❌ รหัสไม่ถูกต้อง — ไม่ได้ลบไฟล์'); return; }
+  if(!await requirePin(_DOC_DEL_PIN, {title:'ยืนยันการลบไฟล์', sub:name, icon:'🗑️'})) return;
   const {error} = await sb.storage.from('invoice_docs').remove([folder+'/'+name]);
   if(error){ alert('ลบไม่สำเร็จ'); return; }
   sb.from('doc_upload_log').insert({invoice_no:inv, doc_type:logType||'?', file_name:name, uploaded_by:LOGGED_USER||'?', action:'delete'}).then(()=>{});
@@ -2184,9 +2182,15 @@ function stmtStartEdit(id){
 //  PASSWORD MODAL
 // ══════════════════════════════════════════
 const DB_PASS = '625465';
-let _pwResolve = null;
+let _pwResolve = null, _pwExpected = DB_PASS;
 
-function requirePass(){
+/* modal ใส่รหัสแบบยืดหยุ่น — คืน Promise<boolean> (true = รหัสถูก) */
+function requirePin(expected, opts){
+  opts = opts||{};
+  _pwExpected = expected;
+  document.getElementById('pwIconEl').textContent = opts.icon || '🔐';
+  document.getElementById('pwTitle').textContent  = opts.title || 'ยืนยันการแก้ไข';
+  document.getElementById('pwSub').textContent    = opts.sub || 'กรุณาใส่รหัสผ่านก่อนบันทึก/ลบข้อมูล';
   return new Promise(resolve => {
     _pwResolve = resolve;
     document.getElementById('pwInput').value = '';
@@ -2195,11 +2199,14 @@ function requirePass(){
     setTimeout(() => document.getElementById('pwInput').focus(), 50);
   });
 }
+/* ของเดิม: ยืนยันด้วยรหัส DB มาตรฐาน */
+function requirePass(){ return requirePin(DB_PASS); }
+
 function pwConfirm(){
   const val = document.getElementById('pwInput').value;
-  if(val === DB_PASS){
+  if(val === _pwExpected){
     document.getElementById('pwModal').classList.remove('show');
-    if(_pwResolve) _pwResolve(true);
+    if(_pwResolve){ const r=_pwResolve; _pwResolve=null; r(true); }
   } else {
     document.getElementById('pwErr').textContent = '❌ รหัสผ่านไม่ถูกต้อง';
     document.getElementById('pwInput').value = '';
@@ -2208,7 +2215,7 @@ function pwConfirm(){
 }
 function pwCancel(){
   document.getElementById('pwModal').classList.remove('show');
-  if(_pwResolve) _pwResolve(false);
+  if(_pwResolve){ const r=_pwResolve; _pwResolve=null; r(false); }
 }
 
 async function stmtSave(id){
