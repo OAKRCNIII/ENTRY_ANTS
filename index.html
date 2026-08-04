@@ -944,7 +944,9 @@ function renderWorkOrder(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;">
       <label style="font-size:11px;font-weight:700;color:#334155;">วันที่อินวอยซ์<input id="wo_date" ${RO} value="${woH(d.invoice_date)}" placeholder="วว/ดด/ปปปป" style="${inpBase}${roBg}margin-top:3px;"></label>
       <label style="font-size:11px;font-weight:700;color:#334155;">เลขอินวอยซ์<input id="wo_inv" readonly value="${woH(d.invoice_no)}" style="${inpBase}background:#f1f5f9;color:#475569;font-family:monospace;font-weight:700;margin-top:3px;"></label>
-      <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">CONSIGNEE<input id="wo_consignee" ${RO} value="${woH(d.consignee)}" style="${inpBase}${roBg}margin-top:3px;"></label>
+      <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">CONSIGNEE (ชื่อ + ที่อยู่ · กว้างๆ ได้)<textarea id="wo_consignee" ${RO} rows="5" style="${inpBase}${roBg}margin-top:3px;resize:vertical;line-height:1.5;">${woH(d.consignee)}</textarea></label>
+      <label style="font-size:11px;font-weight:700;color:#334155;">ชื่อเรือ<input id="wo_vessel" ${RO} value="${woH(d.vessel_name)}" style="${inpBase}${roBg}margin-top:3px;"></label>
+      <label style="font-size:11px;font-weight:700;color:#334155;">วันที่เรือ<input id="wo_vdate" ${RO} value="${woH(d.vessel_date)}" placeholder="วว/ดด/ปปปป" style="${inpBase}${roBg}margin-top:3px;"></label>
       <label style="font-size:11px;font-weight:700;color:#334155;">NW (น้ำหนักสุทธิ)<input id="wo_nw" ${RO} value="${woH(d.nw)}" style="${inpBase}${roBg}margin-top:3px;"></label>
       <label style="font-size:11px;font-weight:700;color:#334155;">GW (น้ำหนักรวม)<input id="wo_gw" ${RO} value="${woH(d.gw)}" style="${inpBase}${roBg}margin-top:3px;"></label>
       <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;display:flex;align-items:center;gap:8px;margin-top:2px;"><input type="checkbox" id="wo_m3" ${edit?'':'disabled'} ${d.show_m3?'checked':''} style="width:16px;height:16px;accent-color:#1e40af;">โชว์ M3 ในเอกสาร</label>
@@ -974,6 +976,8 @@ async function saveWorkOrder(){
     invoice_no: inv,
     invoice_date: document.getElementById('wo_date').value.trim() || null,
     consignee: document.getElementById('wo_consignee').value.trim() || null,
+    vessel_name: document.getElementById('wo_vessel').value.trim() || null,
+    vessel_date: document.getElementById('wo_vdate').value.trim() || null,
     nw: document.getElementById('wo_nw').value.trim() || null,
     gw: document.getElementById('wo_gw').value.trim() || null,
     show_m3: document.getElementById('wo_m3').checked,
