@@ -1016,9 +1016,11 @@ async function loadDocList(){
   /* checklist: ต่อประเภท โชว์ draft + จริง */
   let chkHtml = `<div style="display:flex;flex-direction:column;gap:4px;width:100%;">` + DOC_TYPES.map(t=>{
     const mk = stage => {
-      const has = all.some(f=>f.dtype===t.key && f.stage===stage);
+      const n = all.filter(f=>f.dtype===t.key && f.stage===stage).length;
+      const has = n>0;
       const st = DOC_STAGES.find(s=>s.key===stage);
-      return `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?'✓':'○'} ${st.label}</span>`;
+      const ver = n>1 ? ` <b style="font-size:9px;background:#fff;color:${st.color};border-radius:8px;padding:0 4px;">V.${n}</b>` : '';
+      return `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?'✓':'○'} ${st.label}${ver}</span>`;
     };
     return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;"><span style="min-width:110px;font-weight:700;color:#374151;">${t.label}</span>${mk('DRAFT')}${mk('FINAL')}</div>`;
   }).join('') + `</div>`;
