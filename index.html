@@ -598,6 +598,8 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
           <datalist id="docInvList"></datalist>
           <div id="docInvWarn" style="display:none;font-size:12px;font-weight:700;color:#dc2626;margin-top:7px;">⚠️ กรุณากรอก/เลือกอินวอยซ์ก่อนอัพโหลด</div>
         </div>
+        <!-- ใบคำสั่ง (โผล่เมื่อเลือกอินวอยซ์) -->
+        <div id="woPanel" style="display:none;background:#eef6ff;border:2px solid #93c5fd;border-radius:12px;padding:14px 16px;margin-bottom:14px;"></div>
         <!-- 2 ส่วน: DRAFT + ตั๋วตัวจริง — แนบพร้อมกันได้ทุกช่อง แล้วกดอัพโหลดทีเดียว -->
         <div id="docSlotsWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;"></div>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
@@ -680,20 +682,26 @@ const _CREDS = [
   {user:'DOC_THIRA',  hash:'63162c7482c634ef500b86969ad61af159550e3c441c0d2d4be44bab08553921', role:'doc_clerk'},
   {user:'TARN_ANTS',  hash:'397f493666309dc1ed7b987b4eeaf66de187af201a8387cfe8e25c1f909d06f0', role:'doc_draft'},
   {user:'BOW_ANTS',   hash:'43151a6c0190522a62a4625dbfe41e7e9b5e810adab3af286ffeefa761e87fd0', role:'doc_draft'},
-  {user:'PLA_ANTS',   hash:'4eb57a309e9e3c5384abb29d538d7356094d07c64e0c79fd2ac0c83eb6839aef', role:'doc_draft'},
+  {user:'PLA_ANTS',   hash:'4eb57a309e9e3c5384abb29d538d7356094d07c64e0c79fd2ac0c83eb6839aef', role:'doc_wo'},
 ];
 /* tabs ที่แต่ละ role มีสิทธิ์เห็น (ไม่ระบุ = เห็นทั้งหมด)
-   1. OAK_THIRA (admin)          → ทุกแท็บ
-   2. SU_THIRA (su_clerk)        → SU Statement เท่านั้น
-   3. ANTS_THIRA (vessel_mgr)    → จัดเรือ + ปฏิทินเรือ
-   4. DOC_THIRA (doc_clerk)      → เอกสาร (DRAFT + ตัวจริง)
-   5. TARN/BOW/PLA_ANTS (doc_draft) → เอกสาร (อัพได้เฉพาะ DRAFT) */
+   1. OAK_THIRA (admin)      → ทุกแท็บ · แก้ใบคำสั่งได้
+   2. SU_THIRA (su_clerk)    → SU Statement เท่านั้น
+   3. ANTS_THIRA (vessel_mgr)→ จัดเรือ + ปฏิทินเรือ
+   4. DOC_THIRA (doc_clerk)  → เอกสาร (DRAFT + ตัวจริง)
+   5. TARN/BOW (doc_draft)   → เอกสาร (อัพ DRAFT) · ใบคำสั่งดูอย่างเดียว
+   6. PLA (doc_wo)           → เอกสาร (อัพ DRAFT) · แก้ใบคำสั่งได้ */
 const ROLE_TABS = {
   su_clerk: ['stmt'],
   vessel_manager: ['vessel','cal'],
   doc_clerk: ['docs'],
   doc_draft: ['docs'],
+  doc_wo: ['docs'],
 };
+/* role ที่แก้ใบคำสั่งได้ */
+const canEditWO = () => (USER_ROLE==='admin' || USER_ROLE==='doc_wo');
+/* role ที่อัพได้เฉพาะ DRAFT (ซ่อน FINAL + ปุ่มลบ + Dashboard) */
+const isDraftOnly = () => (USER_ROLE==='doc_draft' || USER_ROLE==='doc_wo');
 const sb = supabase.createClient(SB_URL, SB_KEY);
 let USER_ROLE = '', LOGGED_USER = '';
 
@@ -708,7 +716,7 @@ function applyRoleTabs(role){
   const allowed = ROLE_TABS[role]; /* undefined = ไม่จำกัด */
   /* doc_draft (TARN/BOW) → ซ่อนปุ่มไป Dashboard หลัก */
   const dashBtn = document.getElementById('dashLinkBtn');
-  if(dashBtn) dashBtn.style.display = role==='doc_draft' ? 'none' : '';
+  if(dashBtn) dashBtn.style.display = (role==='doc_draft'||role==='doc_wo') ? 'none' : '';
   const tabBtns = document.querySelectorAll('.tab[onclick*="switchTab"]');
   tabBtns.forEach(btn=>{
     const m = btn.getAttribute('onclick').match(/switchTab\('(\w+)'/);
@@ -833,7 +841,7 @@ function docFolders(inv, stage, type){
 function renderDocSlots(){
   const wrap = document.getElementById('docSlotsWrap');
   if(!wrap) return;
-  const stages = USER_ROLE==='doc_draft' ? DOC_STAGES.filter(s=>s.key==='DRAFT') : DOC_STAGES;
+  const stages = isDraftOnly() ? DOC_STAGES.filter(s=>s.key==='DRAFT') : DOC_STAGES;
   wrap.style.gridTemplateColumns = stages.length>1 ? '1fr 1fr' : '1fr';
   wrap.style.maxWidth = stages.length>1 ? 'none' : '560px';
   wrap.innerHTML = stages.map(st=>`
@@ -870,6 +878,89 @@ function onDocInvChange(){
     warn.style.display='none';
   }
   loadDocList();
+  loadWorkOrder();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ใบคำสั่ง (work_orders)  — OAK/PLA แก้ได้ · BOW/TARN ดูอย่างเดียว
+// ═══════════════════════════════════════════════════════════
+let _woData = null;
+const woH = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+/* เบอร์ตู้หลายบรรทัด → คั่นคอมม่าแนวนอน */
+const woCommas = s => String(s||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).join(', ');
+
+async function loadWorkOrder(){
+  const inv = document.getElementById('docInv').value.trim();
+  const panel = document.getElementById('woPanel');
+  if(!inv){ panel.style.display='none'; _woData=null; return; }
+  panel.style.display='block';
+  panel.innerHTML='<div style="font-size:12px;color:#64748b;">⏳ โหลดใบคำสั่ง...</div>';
+  const { data, error } = await sb.from('work_orders').select('*').eq('invoice_no', inv).maybeSingle();
+  if(error && (error.code==='PGRST205' || /work_orders/.test(error.message||''))){
+    panel.innerHTML='<div style="font-size:12px;color:#b45309;">⚠️ ยังไม่ได้ตั้งค่าตาราง work_orders — รัน SQL ก่อน</div>';
+    _woData=null; return;
+  }
+  _woData = data || { invoice_no: inv };
+  renderWorkOrder();
+}
+
+function renderWorkOrder(){
+  const panel = document.getElementById('woPanel');
+  const d = _woData || {};
+  const edit = canEditWO();
+  const RO = edit ? '' : 'readonly';
+  const inpBase = 'width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #bfdbfe;border-radius:8px;font-size:13px;background:#fff;';
+  const roBg = edit ? '' : 'background:#f8fafc;color:#334155;';
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:800;color:#1e40af;">📋 ใบคำสั่ง — ${woH(d.invoice_no||'')}</div>
+      ${edit?'':'<span style="font-size:10.5px;font-weight:700;color:#64748b;background:#e2e8f0;border-radius:10px;padding:2px 10px;">👁️ ดูอย่างเดียว</span>'}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;">
+      <label style="font-size:11px;font-weight:700;color:#334155;">วันที่อินวอยซ์<input id="wo_date" ${RO} value="${woH(d.invoice_date)}" placeholder="วว/ดด/ปปปป" style="${inpBase}${roBg}margin-top:3px;"></label>
+      <label style="font-size:11px;font-weight:700;color:#334155;">เลขอินวอยซ์<input id="wo_inv" readonly value="${woH(d.invoice_no)}" style="${inpBase}background:#f1f5f9;color:#475569;font-family:monospace;font-weight:700;margin-top:3px;"></label>
+      <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">CONSIGNEE<input id="wo_consignee" ${RO} value="${woH(d.consignee)}" style="${inpBase}${roBg}margin-top:3px;"></label>
+      <label style="font-size:11px;font-weight:700;color:#334155;">NW (น้ำหนักสุทธิ)<input id="wo_nw" ${RO} value="${woH(d.nw)}" style="${inpBase}${roBg}margin-top:3px;"></label>
+      <label style="font-size:11px;font-weight:700;color:#334155;">GW (น้ำหนักรวม)<input id="wo_gw" ${RO} value="${woH(d.gw)}" style="${inpBase}${roBg}margin-top:3px;"></label>
+      <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;display:flex;align-items:center;gap:8px;margin-top:2px;"><input type="checkbox" id="wo_m3" ${edit?'':'disabled'} ${d.show_m3?'checked':''} style="width:16px;height:16px;accent-color:#1e40af;">โชว์ M3 ในเอกสาร</label>
+      <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">เบอร์ตู้ (1 บรรทัด / 1 เบอร์ — คุมลำดับเอง)<textarea id="wo_ctr" ${RO} rows="4" oninput="woSyncCommas()" style="${inpBase}${roBg}margin-top:3px;font-family:monospace;resize:vertical;">${woH(d.containers)}</textarea></label>
+      <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">เบอร์ตู้แนวนอน (คั่นคอมม่า · คัดลอกไปวางได้)<div style="display:flex;gap:6px;margin-top:3px;"><input id="wo_ctr_line" readonly value="${woH(woCommas(d.containers))}" style="${inpBase}background:#f1f5f9;color:#334155;font-family:monospace;"><button type="button" onclick="woCopyLine()" style="flex-shrink:0;padding:0 12px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">📋 คัดลอก</button></div></label>
+    </div>
+    ${edit?`<div style="display:flex;gap:10px;align-items:center;margin-top:12px;"><button class="btn btn-primary" onclick="saveWorkOrder()">💾 SUBMIT / บันทึกใบคำสั่ง</button><span id="woMsg" style="font-size:11.5px;color:#64748b;"></span>${d.updated_by?`<span style="font-size:10.5px;color:#94a3b8;margin-left:auto;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</span>`:''}</div>`:`${d.updated_by?`<div style="font-size:10.5px;color:#94a3b8;margin-top:10px;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>`:'<div style="font-size:11px;color:#94a3b8;margin-top:10px;">ยังไม่มีใบคำสั่ง — รอ OAK/PLA กรอก</div>'}`}
+  `;
+}
+
+function woSyncCommas(){
+  const el = document.getElementById('wo_ctr_line');
+  if(el) el.value = woCommas(document.getElementById('wo_ctr').value);
+}
+function woCopyLine(){
+  const el = document.getElementById('wo_ctr_line');
+  el.select(); document.execCommand('copy');
+  navigator.clipboard && navigator.clipboard.writeText(el.value).catch(()=>{});
+  const msg = document.getElementById('woMsg'); if(msg){ msg.textContent='✅ คัดลอกแล้ว'; msg.style.color='#15803d'; }
+}
+async function saveWorkOrder(){
+  if(!canEditWO()) return;
+  const inv = document.getElementById('docInv').value.trim();
+  const msg = document.getElementById('woMsg');
+  if(!inv){ if(msg){msg.textContent='⚠️ เลือกอินวอยซ์ก่อน'; msg.style.color='#b45309';} return; }
+  const payload = {
+    invoice_no: inv,
+    invoice_date: document.getElementById('wo_date').value.trim() || null,
+    consignee: document.getElementById('wo_consignee').value.trim() || null,
+    nw: document.getElementById('wo_nw').value.trim() || null,
+    gw: document.getElementById('wo_gw').value.trim() || null,
+    show_m3: document.getElementById('wo_m3').checked,
+    containers: document.getElementById('wo_ctr').value.trim() || null,
+    updated_by: LOGGED_USER || '?',
+    updated_at: new Date().toISOString(),
+  };
+  if(msg){ msg.textContent='⏳ กำลังบันทึก...'; msg.style.color='#64748b'; }
+  const { error } = await sb.from('work_orders').upsert(payload, { onConflict:'invoice_no' });
+  if(error){ if(msg){msg.textContent='❌ '+error.message; msg.style.color='#dc2626';} return; }
+  _woData = { ..._woData, ...payload };
+  if(msg){ msg.textContent='✅ บันทึกใบคำสั่งแล้ว — ทุกคนเห็นข้อมูลนี้'; msg.style.color='#15803d'; }
 }
 function flagDocInvMissing(){
   const box = document.getElementById('docInvBox');
@@ -1067,7 +1158,7 @@ async function loadDocList(){
       <td><span style="font-size:11px;font-weight:700;color:#0e7490;">👤 ${uploaderMap[f.stage+'/'+f.dtype+'|'+f.name]||uploaderMap[f.dtype+'|'+f.name]||'-'}</span></td>
       <td style="white-space:nowrap;">
         <button class="btn" style="padding:4px 10px;font-size:11px;background:#dbeafe;color:#1d4ed8;" onclick="openDoc('${folderEsc}','${nameEsc}')">⬇️ เปิด/โหลด</button>
-        ${USER_ROLE==='doc_draft'?'':`<button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${folderEsc}','${nameEsc}','${f.stage}/${f.dtype}')">🗑️</button>`}
+        ${isDraftOnly()?'':`<button class="btn" style="padding:4px 10px;font-size:11px;background:#fee2e2;color:#b91c1c;" onclick="deleteDoc('${folderEsc}','${nameEsc}','${f.stage}/${f.dtype}')">🗑️</button>`}
       </td>
     </tr>`;
   }).join('');
@@ -1101,7 +1192,7 @@ async function loadDocHistory(more){
   const PAGE = 300;
   /* role doc_draft (TARN/BOW) → เห็นเฉพาะประวัติของตัวเอง */
   let q = sb.from('doc_upload_log').select('*');
-  if(USER_ROLE==='doc_draft') q = q.eq('uploaded_by', LOGGED_USER);
+  if(isDraftOnly()) q = q.eq('uploaded_by', LOGGED_USER);
   const {data, error} = await q.order('id',{ascending:false}).range(_docHist.length, _docHist.length+PAGE-1);
   if(error){ body.innerHTML='<tr><td colspan="6" class="empty" style="padding:18px;color:#b91c1c;">โหลดประวัติไม่สำเร็จ — ตาราง doc_upload_log อาจยังไม่ถูกสร้าง</td></tr>'; return; }
   _docHist.push(...(data||[]));
