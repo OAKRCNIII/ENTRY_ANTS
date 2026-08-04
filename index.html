@@ -1009,7 +1009,7 @@ function renderWorkOrder(){
         <div><div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;">↔️ แนวนอน (คั่นคอมม่า)</div><div style="display:flex;gap:6px;"><input id="wo_ctr_line" readonly value="${woH(woCommas(d.containers))}" style="${inpBase}background:#f1f5f9;color:#334155;font-family:monospace;"><button type="button" onclick="woCopyLine()" style="flex-shrink:0;padding:0 12px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">📋</button></div></div>
       </div>
     </div>
-    ${edit?`<div style="display:flex;gap:10px;align-items:center;margin-top:12px;"><button class="btn btn-primary" onclick="saveWorkOrder()">💾 SUBMIT / บันทึกใบคำสั่ง</button><span id="woMsg" style="font-size:11.5px;color:#64748b;"></span>${d.updated_by?`<span style="font-size:10.5px;color:#94a3b8;margin-left:auto;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</span>`:''}</div>`:`${d.updated_by?`<div style="font-size:10.5px;color:#94a3b8;margin-top:10px;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>`:'<div style="font-size:11px;color:#94a3b8;margin-top:10px;">ยังไม่มีใบคำสั่ง — รอ OAK/PLA กรอก</div>'}`}
+    ${edit?`<div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;"><button class="btn btn-primary" onclick="saveWorkOrder()">💾 SUBMIT / บันทึกใบคำสั่ง</button><button class="btn" style="background:#0e7490;color:#fff;" onclick="printWorkOrder()">🖨️ ปริ้นใบคำสั่ง</button><span id="woMsg" style="font-size:11.5px;color:#64748b;"></span>${d.updated_by?`<span style="font-size:10.5px;color:#94a3b8;margin-left:auto;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</span>`:''}</div>`:`<div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;"><button class="btn" style="background:#0e7490;color:#fff;" onclick="printWorkOrder()">🖨️ ปริ้นใบคำสั่ง</button>${d.updated_by?`<span style="font-size:10.5px;color:#94a3b8;margin-left:auto;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</span>`:''}</div>`}
   `;
 }
 
@@ -1025,6 +1025,68 @@ function woCopyLine(){
   el.select(); document.execCommand('copy');
   navigator.clipboard && navigator.clipboard.writeText(el.value).catch(()=>{});
   const msg = document.getElementById('woMsg'); if(msg){ msg.textContent='✅ คัดลอกแล้ว'; msg.style.color='#15803d'; }
+}
+/* เก็บค่าใบคำสั่งปัจจุบัน (ฟอร์มถ้ามี ไม่งั้นจาก _woData) */
+function woCollect(){
+  const g = id => { const e=document.getElementById(id); return e ? (e.type==='checkbox'?e.checked:e.value.trim()) : undefined; };
+  if(document.getElementById('wo_consignee')){
+    return { invoice_no:g('wo_inv'), invoice_date:g('wo_date'), consignee:g('wo_consignee'),
+      vessel_name:g('wo_vessel'), vessel_date:g('wo_vdate'), nw:g('wo_nw'), gw:g('wo_gw'),
+      show_m3:g('wo_m3'), containers:g('wo_ctr') };
+  }
+  return _woData || {};
+}
+function printWorkOrder(){
+  const d = woCollect();
+  const he = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const ctrs = woArr(d.containers);
+  const row = (lb,v) => `<tr><td class="k">${lb}</td><td class="v">${he(v)||'-'}</td></tr>`;
+  const ctrRows = ctrs.length
+    ? ctrs.map((c,i)=>`<tr><td class="cno">${i+1}</td><td class="cval">${he(c)}</td></tr>`).join('')
+    : '<tr><td colspan="2" style="color:#94a3b8;">— ไม่มีเบอร์ตู้ —</td></tr>';
+  const now=new Date(), p=x=>String(x).padStart(2,'0');
+  const printedAt = p(now.getDate())+'/'+p(now.getMonth()+1)+'/'+now.getFullYear()+' '+p(now.getHours())+':'+p(now.getMinutes());
+  const html = `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>ใบคำสั่ง ${he(d.invoice_no)}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
+    @page{size:A4 portrait;margin:16mm 18mm;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Sarabun',sans-serif;font-size:14px;color:#111;line-height:1.55;}
+    .head{text-align:center;border-bottom:2.5px solid #0e7490;padding-bottom:8px;margin-bottom:14px;}
+    .head .t1{font-size:20px;font-weight:800;color:#0e4a5e;letter-spacing:.02em;}
+    .head .t2{font-size:13px;color:#475569;margin-top:2px;}
+    table{width:100%;border-collapse:collapse;}
+    .info td{padding:6px 10px;border:1px solid #cbd5e1;vertical-align:top;}
+    .info td.k{width:32%;background:#f1f5f9;font-weight:700;color:#334155;}
+    .info td.v{white-space:pre-wrap;}
+    .sec{font-size:14px;font-weight:800;color:#0e4a5e;margin:16px 0 6px;}
+    .ctr td{padding:5px 10px;border:1px solid #cbd5e1;}
+    .ctr td.cno{width:44px;text-align:center;background:#f1f5f9;font-weight:700;color:#64748b;}
+    .ctr td.cval{font-family:monospace;font-size:13.5px;letter-spacing:.03em;}
+    .line{margin-top:8px;font-size:13px;}
+    .line b{font-weight:700;}
+    .foot{margin-top:20px;font-size:10.5px;color:#94a3b8;text-align:right;}
+  </style></head><body>
+    <div class="head"><div class="t1">ใบคำสั่งทำเอกสารส่งออก</div><div class="t2">WORK ORDER · A.N.T.S. STAR TRANSIT CO., LTD.</div></div>
+    <table class="info">
+      ${row('เลขอินวอยซ์', d.invoice_no)}
+      ${row('วันที่อินวอยซ์', d.invoice_date)}
+      ${row('CONSIGNEE', d.consignee)}
+      ${row('ชื่อเรือ', d.vessel_name)}
+      ${row('วันที่เรือ', d.vessel_date)}
+      ${row('PHYTO NW', d.nw)}
+      ${row('PHYTO GW', d.gw)}
+      ${row('M3', d.show_m3?'✔ โชว์':'✘ ไม่โชว์')}
+    </table>
+    <div class="sec">เบอร์ตู้ (${ctrs.length} ตู้)</div>
+    <table class="ctr">${ctrRows}</table>
+    ${ctrs.length?`<div class="line"><b>แนวนอน:</b> ${he(woCommas(d.containers))}</div>`:''}
+    <div class="foot">พิมพ์เมื่อ ${printedAt}${d.updated_by?' · แก้ล่าสุดโดย '+he(d.updated_by):''}</div>
+  </body></html>`;
+  const w = window.open('','_blank','width=820,height=900');
+  if(!w){ alert('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+  w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 500);
 }
 async function saveWorkOrder(){
   if(!canEditWO()) return;
