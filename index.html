@@ -1260,6 +1260,13 @@ async function reviewDoc(type, status){
   const list = (await sb.storage.from('invoice_docs').list(docSafe(inv)+'/DRAFT/'+type,{limit:100,sortBy:{column:'created_at',order:'desc'}})).data||[];
   const latest = list.filter(f=>f.name&&!f.name.startsWith('.'))[0];
   if(!latest){ alert('ยังไม่มีไฟล์ DRAFT ของประเภทนี้'); return; }
+  /* กดสถานะเดิมซ้ำ = ยกเลิก (ลบแถวรีวิว → กลับเป็นรอตรวจ) */
+  if(rvState && rvState.state===status){
+    if(!confirm('ยกเลิกสถานะ "'+(status==='approved'?'✅ ผ่าน':'✗ ตีกลับ')+'" ของ '+docTypeLabel(type)+' ?')) return;
+    const { error:delErr } = await sb.from('doc_reviews').delete().eq('invoice_no',inv).eq('doc_type',type);
+    if(delErr){ alert('ยกเลิกไม่สำเร็จ: '+delErr.message); return; }
+    loadDocList(); return;
+  }
   let reason = null;
   if(status==='rejected'){
     reason = prompt('❌ ตีกลับ '+docTypeLabel(type)+' — ใส่เหตุผล (เช่น เอาผิดใบ/เที่ยว):');
@@ -1317,8 +1324,15 @@ async function loadDocList(){
   window._docReviewInv = inv;
   /* approve ครบ 7 ไหม (ปลดล็อกโหลด DRAFT ครบชุด) */
   window._docDraftAllApproved = DOC_TYPES.every(t=>draftReview(t.key).state==='approved');
-  /* checklist: ต่อประเภท โชว์ draft + จริง */
-  let chkHtml = `<div style="display:flex;flex-direction:column;gap:4px;width:100%;">` + DOC_TYPES.map(t=>{
+  /* checklist: ตาราง คอลัมน์ตรงกันทุกแถว — เอกสาร | DRAFT | สถานะตรวจ | (ปุ่มตรวจ) | ตัวจริง */
+  const _edit = canEditWO();
+  const _cols = _edit ? '120px 96px minmax(140px,1fr) 66px 96px' : '120px 96px minmax(140px,1fr) 96px';
+  const _cell = (inner,align='')=>`<div style="border-bottom:1px solid #f1f5f9;padding:5px 0;${align?'text-align:'+align+';':''}min-width:0;">${inner}</div>`;
+  const _hd = (txt,color,align)=>`<div style="font-size:9px;font-weight:800;letter-spacing:.4px;color:${color};padding-bottom:3px;border-bottom:2px solid #eef2f6;${align?'text-align:'+align+';':''}">${txt}</div>`;
+  let chkHtml = `<div style="display:grid;grid-template-columns:${_cols};gap:0 10px;align-items:center;width:100%;">`;
+  chkHtml += _hd('เอกสาร','#94a3b8') + _hd('📝 DRAFT','#d97706','center') + _hd('สถานะตรวจ','#94a3b8')
+           + (_edit?_hd('ตรวจ','#94a3b8','center'):'') + _hd('📋 ตัวจริง','#16a34a','center');
+  chkHtml += DOC_TYPES.map(t=>{
     const mk = stage => {
       const n = all.filter(f=>f.dtype===t.key && f.stage===stage).length;
       const has = n>0;
@@ -1330,19 +1344,25 @@ async function loadDocList(){
       const clickable = has&&canDL;
       return `<span ${click} style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`${clickable?'cursor:pointer;':''}background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?(clickable?'⬇️':'✓'):'○'} ${st.label}${ver}</span>`;
     };
-    /* สถานะตรวจ + ปุ่ม approve/reject (DRAFT เท่านั้น) */
+    /* สถานะตรวจ DRAFT + ปุ่ม approve/reject */
     const rv = draftReview(t.key);
-    let revUI = '';
+    let revChip = '<span style="font-size:10px;color:#cbd5e0;">—</span>', revBtns = '';
     if(rv.state!=='none'){
-      if(rv.state==='approved') revUI=`<span style="font-size:10px;font-weight:700;color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:2px 8px;">✅ ผ่าน${rv.by?' · '+woH(rv.by):''}</span>`;
-      else if(rv.state==='rejected') revUI=`<span title="${woH(rv.reason||'')}" style="font-size:10px;font-weight:700;color:#b91c1c;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:2px 8px;">✗ ตีกลับ${rv.reason?': '+woH(rv.reason).slice(0,30):''}</span>`;
-      else revUI=`<span style="font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:2px 8px;">⏳ รอตรวจ</span>`;
-      if(canEditWO()){
-        revUI+=`<button type="button" onclick="reviewDoc('${t.key}','approved')" title="อนุมัติ" style="border:none;background:#16a34a;color:#fff;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;">✅</button><button type="button" onclick="reviewDoc('${t.key}','rejected')" title="ตีกลับ" style="border:none;background:#dc2626;color:#fff;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;cursor:pointer;">❌</button>`;
+      if(rv.state==='approved') revChip=`<span style="font-size:10px;font-weight:700;color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:2px 8px;">✅ ผ่าน${rv.by?' · '+woH(rv.by):''}</span>`;
+      else if(rv.state==='rejected') revChip=`<span title="${woH(rv.reason||'')}" style="font-size:10px;font-weight:700;color:#b91c1c;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:2px 8px;">✗ ตีกลับ${rv.reason?': '+woH(rv.reason).slice(0,30):''}</span>`;
+      else revChip=`<span style="font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:2px 8px;">⏳ รอตรวจ</span>`;
+      if(_edit){
+        const _apOn=rv.state==='approved', _rjOn=rv.state==='rejected';
+        revBtns=`<button type="button" onclick="reviewDoc('${t.key}','approved')" title="${_apOn?'กดซ้ำ = ยกเลิกอนุมัติ':'อนุมัติ'}" style="border:none;background:${_apOn?'#16a34a':'#e2e8f0'};color:${_apOn?'#fff':'#16a34a'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;margin-right:3px;">✓</button><button type="button" onclick="reviewDoc('${t.key}','rejected')" title="${_rjOn?'กดซ้ำ = ยกเลิกตีกลับ':'ตีกลับ'}" style="border:none;background:${_rjOn?'#dc2626':'#e2e8f0'};color:${_rjOn?'#fff':'#dc2626'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;">✗</button>`;
       }
     }
-    return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;flex-wrap:wrap;"><span style="min-width:110px;font-weight:700;color:#374151;">${t.label}</span>${mk('DRAFT')}${mk('FINAL')}${revUI?'<span style="width:8px;"></span>'+revUI:''}</div>`;
-  }).join('') + `</div>`;
+    return _cell(`<span style="font-size:11.5px;font-weight:700;color:#374151;">${t.label}</span>`)
+         + _cell(mk('DRAFT'),'center')
+         + _cell(revChip)
+         + (_edit?_cell(revBtns,'center'):'')
+         + _cell(mk('FINAL'),'center');
+  }).join('');
+  chkHtml += `</div>`;
   /* ปุ่มโหลดรวม PDF เมื่อครบ 7 ต่อ stage — เฉพาะ OAK/PLA */
   const N = DOC_TYPES.length;
   if(canEditWO()){
