@@ -921,11 +921,14 @@ async function showDocWoView(){
       ${cell('CONSIGNEE',d.consignee?String(d.consignee).replace(/\n/g,' / '):'')}
       ${cell('ชื่อเรือ',d.vessel_name)}
       ${cell('วันที่เรือ',d.vessel_date)}
-      ${cell('NW',d.nw)}
-      ${cell('GW',d.gw)}
+      ${cell('PHYTO NW',d.nw)}
+      ${cell('PHYTO GW',d.gw)}
       ${cell('M3',d.show_m3?'โชว์':'ไม่โชว์')}
     </div>
-    ${ctrLine?`<div style="margin-top:6px;font-size:12px;"><span style="color:#64748b;">เบอร์ตู้:</span> <span style="display:flex;gap:6px;align-items:center;margin-top:3px;"><input readonly value="${woH(ctrLine)}" style="flex:1;padding:5px 8px;border:1.5px solid #bfdbfe;border-radius:7px;font-family:monospace;font-size:12px;background:#f8fafc;"><button type="button" onclick="(function(){const i=this.previousElementSibling;i.select();document.execCommand('copy');navigator.clipboard&&navigator.clipboard.writeText(i.value)}).call(this)" style="padding:0 10px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:7px;cursor:pointer;font-size:11px;font-weight:700;">📋</button></span></div>`:''}
+    ${d.containers?`<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1.4fr;gap:12px;">
+      <div><div style="font-size:11px;color:#64748b;margin-bottom:3px;">↕️ เบอร์ตู้ (คลิกคัดลอกรายตู้)</div>${woVerticalHtml(d.containers)}</div>
+      <div><div style="font-size:11px;color:#64748b;margin-bottom:3px;">↔️ แนวนอน (คั่นคอมม่า)</div><span style="display:flex;gap:6px;"><input readonly value="${woH(ctrLine)}" style="flex:1;padding:5px 8px;border:1.5px solid #bfdbfe;border-radius:7px;font-family:monospace;font-size:12px;background:#f8fafc;"><button type="button" onclick="woCopyText('${ctrLine.replace(/'/g,"\\'")}',this)" style="padding:0 10px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:7px;cursor:pointer;font-size:11px;font-weight:700;">📋</button></span></div>
+    </div>`:''}
   `;
 }
 
@@ -936,6 +939,21 @@ let _woData = null, _woInit = false;
 const woH = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 /* เบอร์ตู้หลายบรรทัด → คั่นคอมม่าแนวนอน */
 const woCommas = s => String(s||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).join(', ');
+const woArr = s => String(s||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean);
+/* คัดลอกข้อความ + โชว์ ✓ ชั่วคราว */
+function woCopyText(txt, el){
+  const done=()=>{ if(el){ const o=el.getAttribute('data-o')||el.textContent; el.setAttribute('data-o',o); el.textContent='✓ คัดลอกแล้ว'; setTimeout(()=>el.textContent=o,1000); } };
+  if(navigator.clipboard){ navigator.clipboard.writeText(txt).then(done).catch(()=>{}); }
+  else { const t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); done(); }
+}
+/* เบอร์ตู้แนวตั้ง — แต่ละตู้คลิกคัดลอกได้ */
+function woVerticalHtml(str){
+  const arr = woArr(str);
+  if(!arr.length) return '';
+  return `<div style="display:flex;flex-direction:column;gap:4px;">` + arr.map(c=>
+    `<div onclick="woCopyText('${c.replace(/'/g,"\\'")}',this)" title="คลิกเพื่อคัดลอกตู้นี้" style="cursor:pointer;padding:4px 10px;background:#fff;border:1px solid #bfdbfe;border-radius:6px;font-family:monospace;font-size:12px;color:#1e293b;transition:background .1s;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='#fff'">${woH(c)}</div>`
+  ).join('') + `</div>`;
+}
 
 /* datalist อินวอยซ์ในแท็บใบคำสั่ง (ใช้ชุดเดียวกับหน้าเอกสาร) */
 async function initWorkOrderTab(){
@@ -981,19 +999,25 @@ function renderWorkOrder(){
       <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">CONSIGNEE (ชื่อ + ที่อยู่ · กว้างๆ ได้)<textarea id="wo_consignee" ${RO} rows="5" style="${inpBase}${roBg}margin-top:3px;resize:vertical;line-height:1.5;">${woH(d.consignee)}</textarea></label>
       <label style="font-size:11px;font-weight:700;color:#334155;">ชื่อเรือ<input id="wo_vessel" ${RO} value="${woH(d.vessel_name)}" style="${inpBase}${roBg}margin-top:3px;"></label>
       <label style="font-size:11px;font-weight:700;color:#334155;">วันที่เรือ<input id="wo_vdate" ${RO} value="${woH(d.vessel_date)}" placeholder="วว/ดด/ปปปป" style="${inpBase}${roBg}margin-top:3px;"></label>
-      <label style="font-size:11px;font-weight:700;color:#334155;">NW (น้ำหนักสุทธิ)<input id="wo_nw" ${RO} value="${woH(d.nw)}" style="${inpBase}${roBg}margin-top:3px;"></label>
-      <label style="font-size:11px;font-weight:700;color:#334155;">GW (น้ำหนักรวม)<input id="wo_gw" ${RO} value="${woH(d.gw)}" style="${inpBase}${roBg}margin-top:3px;"></label>
+      <label style="font-size:11px;font-weight:700;color:#334155;">PHYTO NW<input id="wo_nw" ${RO} value="${woH(d.nw)}" style="${inpBase}${roBg}margin-top:3px;"></label>
+      <label style="font-size:11px;font-weight:700;color:#334155;">PHYTO GW<input id="wo_gw" ${RO} value="${woH(d.gw)}" style="${inpBase}${roBg}margin-top:3px;"></label>
       <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;display:flex;align-items:center;gap:8px;margin-top:2px;"><input type="checkbox" id="wo_m3" ${edit?'':'disabled'} ${d.show_m3?'checked':''} style="width:16px;height:16px;accent-color:#1e40af;">โชว์ M3 ในเอกสาร</label>
       <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">เบอร์ตู้ (1 บรรทัด / 1 เบอร์ — คุมลำดับเอง)<textarea id="wo_ctr" ${RO} rows="4" oninput="woSyncCommas()" style="${inpBase}${roBg}margin-top:3px;font-family:monospace;resize:vertical;">${woH(d.containers)}</textarea></label>
-      <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">เบอร์ตู้แนวนอน (คั่นคอมม่า · คัดลอกไปวางได้)<div style="display:flex;gap:6px;margin-top:3px;"><input id="wo_ctr_line" readonly value="${woH(woCommas(d.containers))}" style="${inpBase}background:#f1f5f9;color:#334155;font-family:monospace;"><button type="button" onclick="woCopyLine()" style="flex-shrink:0;padding:0 12px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">📋 คัดลอก</button></div></label>
+      <div style="grid-column:1/3;display:grid;grid-template-columns:1fr 1.4fr;gap:12px;">
+        <div><div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;">↕️ แนวตั้ง (คลิกคัดลอกรายตู้)</div><div id="wo_ctr_vert">${woVerticalHtml(d.containers)||'<span style="font-size:11px;color:#94a3b8;">—</span>'}</div></div>
+        <div><div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;">↔️ แนวนอน (คั่นคอมม่า)</div><div style="display:flex;gap:6px;"><input id="wo_ctr_line" readonly value="${woH(woCommas(d.containers))}" style="${inpBase}background:#f1f5f9;color:#334155;font-family:monospace;"><button type="button" onclick="woCopyLine()" style="flex-shrink:0;padding:0 12px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">📋</button></div></div>
+      </div>
     </div>
     ${edit?`<div style="display:flex;gap:10px;align-items:center;margin-top:12px;"><button class="btn btn-primary" onclick="saveWorkOrder()">💾 SUBMIT / บันทึกใบคำสั่ง</button><span id="woMsg" style="font-size:11.5px;color:#64748b;"></span>${d.updated_by?`<span style="font-size:10.5px;color:#94a3b8;margin-left:auto;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</span>`:''}</div>`:`${d.updated_by?`<div style="font-size:10.5px;color:#94a3b8;margin-top:10px;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>`:'<div style="font-size:11px;color:#94a3b8;margin-top:10px;">ยังไม่มีใบคำสั่ง — รอ OAK/PLA กรอก</div>'}`}
   `;
 }
 
 function woSyncCommas(){
+  const src = document.getElementById('wo_ctr').value;
   const el = document.getElementById('wo_ctr_line');
-  if(el) el.value = woCommas(document.getElementById('wo_ctr').value);
+  if(el) el.value = woCommas(src);
+  const vert = document.getElementById('wo_ctr_vert');
+  if(vert) vert.innerHTML = woVerticalHtml(src) || '<span style="font-size:11px;color:#94a3b8;">—</span>';
 }
 function woCopyLine(){
   const el = document.getElementById('wo_ctr_line');
