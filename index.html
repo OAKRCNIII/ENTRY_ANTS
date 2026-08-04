@@ -1374,16 +1374,12 @@ async function loadDocList(){
     DOC_STAGES.forEach(st=>{
       const cnt = window._docMergeFiles[st.key].length;
       const base = st.key==='DRAFT'?'#d97706':'#16a34a';
-      const approvedN = st.key==='DRAFT' ? DOC_TYPES.filter(t=>draftReview(t.key).state==='approved').length : N;
-      const needApprove = st.key==='DRAFT';
-      const ready = cnt>=N && (!needApprove || window._docDraftAllApproved);
+      const ready = cnt>=N;   /* โหลดรวมได้เมื่อครบ 7 ไฟล์ — DRAFT ไม่ต้องรอ APPROVE */
       if(ready){
         const fn = st.key==='DRAFT'?'โหลด DRAFT':'โหลดตั๋วตัวจริง';
         chkHtml += `<button type="button" onclick="mergeDocsEntry('${st.key}')" style="padding:7px 15px;background:${base};border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">📑 ${fn} (รวม 7 หน้า)</button>`;
-      }else if(cnt<N){
-        chkHtml += `<span style="font-size:10.5px;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e0;border-radius:8px;padding:6px 11px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label} ครบ ${cnt}/${N}</span>`;
       }else{
-        chkHtml += `<span style="font-size:10.5px;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 11px;">🔒 ${st.label} — รอ APPROVE ครบ (${approvedN}/${N})</span>`;
+        chkHtml += `<span style="font-size:10.5px;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e0;border-radius:8px;padding:6px 11px;">${st.key==='DRAFT'?'📝':'📋'} ${st.label} ครบ ${cnt}/${N}</span>`;
       }
     });
     chkHtml += `<span id="docMergeMsg" style="font-size:11px;color:#64748b;align-self:center;"></span></div>`;
