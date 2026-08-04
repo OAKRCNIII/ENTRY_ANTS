@@ -833,6 +833,20 @@ async function initDocs(){
   loadDocHistory();
 }
 
+/* รีเฟรชหน้าเอกสาร: อัพเดตรายชื่ออินวอยซ์ + ประวัติ + รายการที่กำลังดู */
+async function reloadDocsTab(){
+  try{
+    const dl = document.getElementById('docInv').list || document.getElementById('docInvList');
+    const cutoff = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+    const invRes = await sb.from('invoices').select('invoice_no,created_at').gte('created_at', cutoff).order('id',{ascending:false});
+    const list = invRes.data||[];
+    window._docInvSet = new Set(list.map(r=>String(r.invoice_no).trim().toUpperCase()));
+    if(dl) dl.innerHTML = list.map(r=>`<option value="${String(r.invoice_no).replace(/"/g,'&quot;')}"></option>`).join('');
+  }catch(e){}
+  loadDocHistory();
+  if(document.getElementById('docInv').value.trim()) loadDocList();
+}
+
 /* ประเภทเอกสาร 7 ชนิด — เก็บแยกโฟลเดอร์: {inv}/{STAGE}/{TYPE}/{filename} */
 const DOC_TYPES = [
   {key:'INVOICE',      label:'INVOICE'},
@@ -2904,16 +2918,28 @@ async function forceRefresh(){
   btn.textContent = '⏳ กำลังโหลด...';
   btn.disabled = true;
   try {
-    // ล้าง draft ทุก slot (inv + loy) ไม่แตะ slot configs (ชื่อเรือ/วันที่)
-    for(let i = 0; i < SLOT_COUNT; i++){
-      localStorage.removeItem(getInvKey(i));
-      localStorage.removeItem(getLoyKey(i));
+    /* รีโหลดตามแท็บที่เปิดอยู่จริง */
+    const active = (document.querySelector('.tab-content.active')||{}).id || '';
+    const tab = active.replace(/^tab-/,'');
+    if(typeof bellRefresh==='function') bellRefresh();
+    if(tab==='vessel'){
+      /* ล้าง draft เรือเฉพาะตอนอยู่แท็บจัดเรือ (กันข้อมูลหายโดยไม่ตั้งใจ) */
+      for(let i=0;i<SLOT_COUNT;i++){ localStorage.removeItem(getInvKey(i)); localStorage.removeItem(getLoyKey(i)); }
+      await loadVessels();
+    } else if(tab==='cal'){
+      await initCal();
+    } else if(tab==='dbvessel'){
+      await loadDbVessel();
+    } else if(tab==='docs'){
+      await reloadDocsTab();
+    } else if(tab==='workorder'){
+      _woInit=false; await initWorkOrderTab();
+      if(document.getElementById('woInv').value.trim()) loadWorkOrder();
+    } else {
+      loadStmt();   /* stmt หรือ default */
     }
-    // โหลดใหม่จาก Supabase
-    await loadVessels();
-    loadStmt();
     btn.textContent = '✅ โหลดแล้ว';
-    setTimeout(() => { btn.textContent = '🔄 รีเฟรช'; btn.disabled = false; }, 1500);
+    setTimeout(() => { btn.textContent = '🔄 รีเฟรช'; btn.disabled = false; }, 1200);
   } catch(e) {
     btn.textContent = '❌ Error';
     setTimeout(() => { btn.textContent = '🔄 รีเฟรช'; btn.disabled = false; }, 2000);
