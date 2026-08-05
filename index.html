@@ -1767,12 +1767,13 @@ async function bellFetch(){
   const mode = bellMode();
   if(!mode) return [];
   try{
+    let events = [];
     if(mode==='reviewer'){
       const { data } = await sb.from('doc_upload_log')
         .select('invoice_no,doc_type,file_name,uploaded_by,created_at')
         .eq('action','upload').like('doc_type','DRAFT/%')
         .order('id',{ascending:false}).limit(120);
-      return (data||[])
+      events = (data||[])
         .filter(r=>r.uploaded_by!==LOGGED_USER)
         .map(r=>({kind:'upload', ts:r.created_at, inv:r.invoice_no,
                   type:String(r.doc_type||'').replace(/^DRAFT\//,''), who:r.uploaded_by}));
@@ -1782,11 +1783,24 @@ async function bellFetch(){
         sb.from('doc_reviews').select('*').order('reviewed_at',{ascending:false}).limit(200)
       ]);
       const mine = new Set((upRes.data||[]).map(u=>u.file_name));
-      return (rvRes.data||[])
+      events = (rvRes.data||[])
         .filter(r=>r.file_name && mine.has(r.file_name))
         .map(r=>({kind:'review', ts:r.reviewed_at, inv:r.invoice_no, type:r.doc_type,
                   status:r.status, reason:r.reason, by:r.reviewed_by}));
     }
+    /* ใบคำสั่งใหม่/อัปเดต — ทุก role เห็น (ยกเว้นที่ตัวเองแก้) */
+    try{
+      const { data:wos } = await sb.from('work_orders')
+        .select('invoice_no,updated_by,updated_at,created_at')
+        .order('updated_at',{ascending:false}).limit(80);
+      const woEv = (wos||[])
+        .filter(w=>w.updated_by!==LOGGED_USER)
+        .map(w=>({kind:'workorder', ts:w.updated_at||w.created_at, inv:w.invoice_no, by:w.updated_by,
+                  isNew: !!(w.created_at && w.updated_at && String(w.created_at)===String(w.updated_at))}));
+      events = events.concat(woEv);
+    }catch(e){ /* ตาราง work_orders อาจยังไม่มี */ }
+    events.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||'')));
+    return events;
   }catch(e){ return []; }
 }
 
@@ -1830,6 +1844,9 @@ function bellRenderList(){
       if(e.kind==='upload'){
         line = `<div style="font-size:12px;font-weight:700;color:#1e293b;">📎 อัพเอกสารใหม่ · ${woH(lbl(e.type))}</div>
                 <div style="font-size:11px;color:#64748b;">อินวอยซ์ <b>${woH(e.inv)}</b>${e.who?' · โดย '+woH(e.who):''}</div>`;
+      } else if(e.kind==='workorder'){
+        line = `<div style="font-size:12px;font-weight:700;color:#7c3aed;">📋 ${e.isNew?'ใบคำสั่งใหม่':'อัปเดตใบคำสั่ง'}</div>
+                <div style="font-size:11px;color:#64748b;">อินวอยซ์ <b>${woH(e.inv)}</b>${e.by?' · โดย '+woH(e.by):''}</div>`;
       } else {
         const ok = e.status==='approved';
         line = `<div style="font-size:12px;font-weight:700;color:${ok?'#166534':'#b91c1c'};">${ok?'✅ APPROVED':'✗ REJECTED — กรุณาอัพเอกสารใหม่'} · ${woH(lbl(e.type))}</div>
@@ -1871,6 +1888,7 @@ function bellInit(){
     _bellChannel = sb.channel('bell_'+(LOGGED_USER||'x'))
       .on('postgres_changes', {event:'INSERT', schema:'public', table:'doc_upload_log'}, bellRealtimeHit)
       .on('postgres_changes', {event:'*',      schema:'public', table:'doc_reviews'},    bellRealtimeHit)
+      .on('postgres_changes', {event:'*',      schema:'public', table:'work_orders'},    bellRealtimeHit)
       .subscribe();
   }catch(e){ /* ถ้า realtime ใช้ไม่ได้ ยังมี poll สำรอง */ }
   /* poll สำรอง (เผื่อ realtime ไม่ได้เปิดใน Supabase) */
