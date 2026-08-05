@@ -682,6 +682,13 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
           <datalist id="woInvList"></datalist>
         </div>
         <div id="woPanel" style="display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px 16px;"></div>
+        <div style="margin-top:18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <div style="font-size:14px;font-weight:800;color:#334155;">🕘 ประวัติใบคำสั่ง</div>
+            <button type="button" onclick="loadWorkOrderHistory()" style="border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:4px 11px;font-size:11px;cursor:pointer;color:#475569;">🔄 รีเฟรช</button>
+          </div>
+          <div id="woHistory" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;"></div>
+        </div>
       </div>
     </div><!-- /tab-workorder -->
 
@@ -1003,6 +1010,54 @@ async function initWorkOrderTab(){
     const res = await sb.from('invoices').select('invoice_no,created_at').gte('created_at', cutoff).order('id',{ascending:false});
     dl.innerHTML = (res.data||[]).map(r=>`<option value="${String(r.invoice_no).replace(/"/g,'&quot;')}"></option>`).join('');
   }catch(e){}
+  loadWorkOrderHistory();
+}
+
+/* ประวัติใบคำสั่งทั้งหมด — เรียงแก้ล่าสุดก่อน · คลิกเปิด · ลบได้ (OAK/PLA) */
+async function loadWorkOrderHistory(){
+  const box = document.getElementById('woHistory');
+  if(!box) return;
+  box.innerHTML = '<div style="font-size:12px;color:#64748b;padding:10px;">⏳ กำลังโหลด...</div>';
+  const { data, error } = await sb.from('work_orders')
+    .select('invoice_no,consignee,updated_by,updated_at')
+    .order('updated_at',{ascending:false}).limit(300);
+  if(error){ box.innerHTML='<div style="font-size:12px;color:#dc2626;padding:10px;">โหลดประวัติไม่สำเร็จ: '+woH(error.message)+'</div>'; return; }
+  const rows = data||[];
+  if(!rows.length){ box.innerHTML='<div style="font-size:12px;color:#94a3b8;padding:14px;text-align:center;">— ยังไม่มีใบคำสั่ง —</div>'; return; }
+  const edit = canEditWO();
+  const fmt = s=>{ const d=new Date(s); return isNaN(d)?'':d.toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+  box.innerHTML =
+    `<div style="padding:7px 12px;font-size:11px;font-weight:700;color:#64748b;border-bottom:2px solid #eef2f6;background:#f8fafc;border-radius:12px 12px 0 0;">${rows.length} ใบคำสั่ง</div>`+
+    `<div style="max-height:360px;overflow-y:auto;">`+
+    rows.map(r=>{
+      const cons = (r.consignee||'').split('\n')[0].slice(0,44);
+      const invEsc = String(r.invoice_no).replace(/'/g,"\\'");
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f1f5f9;">
+        <div style="flex:1;min-width:0;cursor:pointer;" onclick="woOpenFromHistory('${invEsc}')">
+          <div style="font-size:12px;font-weight:700;color:#1e40af;font-family:monospace;">${woH(r.invoice_no)}</div>
+          <div style="font-size:10.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${woH(cons)||'—'}</div>
+          <div style="font-size:9.5px;color:#94a3b8;margin-top:1px;">${r.updated_by?woH(r.updated_by)+' · ':''}${fmt(r.updated_at)}</div>
+        </div>
+        ${edit?`<button type="button" onclick="deleteWorkOrder('${invEsc}')" title="ลบใบคำสั่งนี้" style="flex-shrink:0;border:1px solid #fca5a5;background:#fee2e2;color:#b91c1c;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">🗑️</button>`:''}
+      </div>`;
+    }).join('')+`</div>`;
+}
+function woOpenFromHistory(inv){
+  const el=document.getElementById('woInv');
+  if(el){ el.value=inv; loadWorkOrder(); }
+  const p=document.getElementById('woPanel'); if(p) p.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+async function deleteWorkOrder(inv){
+  if(!canEditWO()) return;
+  if(!await requirePin(_DOC_DEL_PIN, {title:'ยืนยันการลบใบคำสั่ง', sub:'อินวอยซ์ '+inv, icon:'🗑️'})) return;
+  const { error } = await sb.from('work_orders').delete().eq('invoice_no', inv);
+  if(error){ alert('ลบไม่สำเร็จ: '+error.message); return; }
+  /* ถ้ากำลังเปิดใบนี้อยู่ → เคลียร์ฟอร์ม */
+  if((document.getElementById('woInv').value||'').trim()===inv){
+    document.getElementById('woInv').value=''; _woData=null;
+    const p=document.getElementById('woPanel'); if(p) p.style.display='none';
+  }
+  loadWorkOrderHistory();
 }
 
 async function loadWorkOrder(){
@@ -1199,6 +1254,7 @@ async function saveWorkOrder(){
   if(error){ if(msg){msg.textContent='❌ '+error.message; msg.style.color='#dc2626';} return; }
   _woData = { ..._woData, ...payload };
   if(msg){ msg.textContent='✅ บันทึกใบคำสั่งแล้ว — ทุกคนเห็นข้อมูลนี้'; msg.style.color='#15803d'; }
+  loadWorkOrderHistory();
 }
 function flagDocInvMissing(){
   const box = document.getElementById('docInvBox');
