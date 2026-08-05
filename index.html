@@ -1111,7 +1111,7 @@ function printWorkOrder(){
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
     @page{size:A4 portrait;margin:12mm 14mm;}
     *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    body{font-family:'Sarabun',sans-serif;font-size:13px;color:#111;line-height:1.4;}
+    body{font-family:'Sarabun',sans-serif;font-size:13px;color:#111;line-height:1.4;width:182mm;margin:0 auto;}
     .head{text-align:center;border-bottom:2.5px solid #0e7490;padding-bottom:6px;margin-bottom:10px;}
     .head .t1{font-size:18px;font-weight:800;color:#0e4a5e;letter-spacing:.02em;}
     .head .t2{font-size:12px;color:#475569;margin-top:1px;}
@@ -1141,10 +1141,29 @@ function printWorkOrder(){
     <div class="ctrlist">${ctrItems}</div>
     <div class="foot">พิมพ์เมื่อ ${printedAt}${d.updated_by?' · แก้ล่าสุดโดย '+he(d.updated_by):''}</div>
   </body></html>`;
-  const w = window.open('','_blank','width=820,height=900');
+  const w = window.open('','_blank','width=820,height=1000');
   if(!w){ alert('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์'); return; }
   w.document.open(); w.document.write(html); w.document.close();
-  w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 500);
+  /* วัดความสูงจริง แล้วย่อฟอนต์เบอร์ตู้ลงจนพอ 1 หน้า A4 (สูงใช้งาน ~273mm ≈ 1030px) */
+  const _autoFit = () => {
+    try{
+      const doc=w.document, LIMIT=1015;   /* กันขอบล่างไว้เล็กน้อย */
+      let s=cfs;
+      const cvs=doc.querySelectorAll('.cv'), cns=doc.querySelectorAll('.cn'),
+            cis=doc.querySelectorAll('.ci'), list=doc.querySelector('.ctrlist');
+      let guard=0;
+      while(doc.body.scrollHeight>LIMIT && s>7 && guard<120){
+        s-=0.5; guard++;
+        cvs.forEach(e=>e.style.fontSize=s+'px');
+        cns.forEach(e=>e.style.fontSize=(s*0.6)+'px');
+        cis.forEach(e=>e.style.padding=Math.max(1,s*0.28)+'px 4px');
+        if(list) list.style.gap=Math.max(0,s*0.16)+'px';
+      }
+    }catch(e){}
+    w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 250);
+  };
+  if(w.document.fonts && w.document.fonts.ready){ w.document.fonts.ready.then(()=>setTimeout(_autoFit,60)); }
+  else setTimeout(_autoFit, 450);
 }
 async function saveWorkOrder(){
   if(!canEditWO()) return;
