@@ -1056,11 +1056,19 @@ function renderWorkOrder(){
       <label style="grid-column:1/3;font-size:11px;font-weight:700;color:#334155;">เบอร์ตู้ (1 บรรทัด / 1 เบอร์ — คุมลำดับเอง)<textarea id="wo_ctr" ${RO} rows="6" oninput="woSyncCommas()" style="${inpBase}${manualBg}margin-top:3px;font-family:monospace;resize:both;min-height:90px;max-width:100%;">${woH(d.containers)}</textarea></label>
       <div style="grid-column:1/3;display:grid;grid-template-columns:1fr 1.4fr;gap:12px;">
         <div><div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;">↕️ แนวตั้ง (ระบบสร้างเอง · คลิกคัดลอกรายตู้)</div><div id="wo_ctr_vert" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:6px;">${woVerticalHtml(d.containers)||'<span style="font-size:11px;color:#94a3b8;">—</span>'}</div></div>
-        <div><div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;">↔️ แนวนอน (คั่นคอมม่า)</div><div style="display:flex;gap:6px;"><input id="wo_ctr_line" readonly value="${woH(woCommas(d.containers))}" style="${inpBase}background:#f1f5f9;color:#334155;font-family:monospace;"><button type="button" onclick="woCopyLine()" style="flex-shrink:0;padding:0 12px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">📋</button></div></div>
+        <div><div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;">↔️ แนวนอน (ระบบสร้างเอง · คั่นคอมม่า)</div><div style="display:flex;gap:6px;align-items:flex-start;"><textarea id="wo_ctr_line" readonly rows="2" style="${inpBase}background:#f1f5f9;color:#334155;font-family:monospace;resize:vertical;line-height:1.7;white-space:pre-wrap;word-break:break-all;overflow:hidden;">${woH(woCommas(d.containers))}</textarea><button type="button" onclick="woCopyLine()" style="flex-shrink:0;padding:7px 12px;border:1.5px solid #93c5fd;background:#dbeafe;color:#1e40af;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">📋</button></div></div>
       </div>
     </div>
     ${edit?`<div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;"><button class="btn btn-primary" onclick="saveWorkOrder()">💾 SUBMIT / บันทึกใบคำสั่ง</button><button class="btn" style="background:#0e7490;color:#fff;" onclick="printWorkOrder()">🖨️ ปริ้นใบคำสั่ง</button><span id="woMsg" style="font-size:11.5px;color:#64748b;"></span>${d.updated_by?`<span style="font-size:10.5px;color:#94a3b8;margin-left:auto;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</span>`:''}</div>`:`<div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;"><button class="btn" style="background:#0e7490;color:#fff;" onclick="printWorkOrder()">🖨️ ปริ้นใบคำสั่ง</button>${d.updated_by?`<span style="font-size:10.5px;color:#94a3b8;margin-left:auto;">แก้ล่าสุด: ${woH(d.updated_by)} · ${d.updated_at?new Date(d.updated_at).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</span>`:''}</div>`}
   `;
+  woAutosizeLine();
+}
+/* ปรับสูงกล่องแนวนอนให้เห็นครบทุกตู้ (ไม่ต้อง scroll) */
+function woAutosizeLine(){
+  const el=document.getElementById('wo_ctr_line');
+  if(!el) return;
+  el.style.height='auto';
+  el.style.height=(el.scrollHeight+4)+'px';
 }
 
 function woM3Toggle(){
@@ -1071,7 +1079,7 @@ function woM3Toggle(){
 function woSyncCommas(){
   const src = document.getElementById('wo_ctr').value;
   const el = document.getElementById('wo_ctr_line');
-  if(el) el.value = woCommas(src);
+  if(el){ el.value = woCommas(src); woAutosizeLine(); }
   const vert = document.getElementById('wo_ctr_vert');
   if(vert) vert.innerHTML = woVerticalHtml(src) || '<span style="font-size:11px;color:#94a3b8;">—</span>';
 }
