@@ -1097,8 +1097,13 @@ function printWorkOrder(){
   const ctrs = woArr(d.containers);
   const row = (lb,v) => `<tr><td class="k">${lb}</td><td class="v">${he(v)||'-'}</td></tr>`;
   const ctrItems = ctrs.length
-    ? ctrs.map((c,i)=>`<div class="ci"><span class="cn">${i+1}</span><span class="cv">${he(c)}</span></div>`).join('')
-    : '<div style="color:#94a3b8;grid-column:1/-1;">— ไม่มีเบอร์ตู้ —</div>';
+    ? ctrs.map((c,i)=>`<div class="ci"><span class="cn">${i+1}.</span><span class="cv">${he(c)}</span></div>`).join('')
+    : '<div style="color:#94a3b8;">— ไม่มีเบอร์ตู้ —</div>';
+  /* ขนาดฟอนต์เบอร์ตู้ ปรับอัตโนมัติตามจำนวนตู้ → เรียงลงคอลัมน์เดียว ตัวใหญ่ แต่พอใน 1 หน้า */
+  const _n = ctrs.length || 1;
+  const cfs  = Math.max(11, Math.min(26, Math.floor(470/_n)));
+  const cgap = Math.max(1, Math.round(cfs*0.18));
+  const cpad = Math.max(2, Math.round(cfs*0.30));
   const now=new Date(), p=x=>String(x).padStart(2,'0');
   const printedAt = p(now.getDate())+'/'+p(now.getMonth()+1)+'/'+now.getFullYear()+' '+p(now.getHours())+':'+p(now.getMinutes());
   const html = `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>ใบคำสั่ง ${he(d.invoice_no)}</title>
@@ -1115,10 +1120,10 @@ function printWorkOrder(){
     .info td.k{width:30%;background:#f1f5f9;font-weight:700;color:#334155;}
     .info td.v{white-space:pre-wrap;}
     .sec{font-size:13px;font-weight:800;color:#0e4a5e;margin:11px 0 5px;}
-    .ctrgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 8px;}
-    .ci{display:flex;align-items:center;gap:6px;border:1px solid #cbd5e1;border-radius:5px;padding:3px 7px;}
-    .cn{min-width:16px;text-align:center;color:#64748b;font-weight:700;font-size:10px;flex-shrink:0;}
-    .cv{font-family:monospace;font-size:12.5px;letter-spacing:.02em;}
+    .ctrlist{display:flex;flex-direction:column;gap:${cgap}px;}
+    .ci{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #e2e8f0;padding:${cpad}px 4px;}
+    .cn{min-width:${Math.round(cfs*1.4)}px;text-align:right;color:#94a3b8;font-weight:700;font-size:${Math.round(cfs*0.6)}px;flex-shrink:0;}
+    .cv{font-family:'Sarabun',monospace;font-size:${cfs}px;font-weight:700;letter-spacing:.06em;color:#0f172a;}
     .foot{margin-top:14px;font-size:10px;color:#94a3b8;text-align:right;}
   </style></head><body>
     <div class="head"><div class="t1">ใบคำสั่งทำเอกสารส่งออก</div><div class="t2">WORK ORDER · A.N.T.S. STAR TRANSIT CO., LTD.</div></div>
@@ -1133,7 +1138,7 @@ function printWorkOrder(){
       ${row('M3', d.show_m3?('✔ โชว์'+(d.m3_value?' · '+d.m3_value+' M³':'')):'✘ ไม่โชว์')}
     </table>
     <div class="sec">เบอร์ตู้ (${ctrs.length} ตู้)</div>
-    <div class="ctrgrid">${ctrItems}</div>
+    <div class="ctrlist">${ctrItems}</div>
     <div class="foot">พิมพ์เมื่อ ${printedAt}${d.updated_by?' · แก้ล่าสุดโดย '+he(d.updated_by):''}</div>
   </body></html>`;
   const w = window.open('','_blank','width=820,height=900');
