@@ -1497,12 +1497,12 @@ async function loadDocList(){
   window._docDraftAllApproved = DOC_TYPES.every(t=>draftReview(t.key).state==='approved');
   /* checklist: ตาราง คอลัมน์ตรงกันทุกแถว — เอกสาร | DRAFT | สถานะตรวจ | (ปุ่มตรวจ) | ตัวจริง */
   const _edit = canEditWO();
-  const _cols = _edit ? '120px 96px minmax(140px,1fr) 66px 96px' : '120px 96px minmax(140px,1fr) 96px';
+  const _cols = _edit ? '120px 92px minmax(130px,1fr) 44px 62px 92px' : '120px 96px minmax(140px,1fr) 96px';
   const _cell = (inner,align='')=>`<div style="border-bottom:1px solid #f1f5f9;padding:5px 0;${align?'text-align:'+align+';':''}min-width:0;">${inner}</div>`;
   const _hd = (txt,color,align)=>`<div style="font-size:9px;font-weight:800;letter-spacing:.4px;color:${color};padding-bottom:3px;border-bottom:2px solid #eef2f6;${align?'text-align:'+align+';':''}">${txt}</div>`;
   let chkHtml = `<div style="display:grid;grid-template-columns:${_cols};gap:0 10px;align-items:center;width:100%;">`;
   chkHtml += _hd('เอกสาร','#94a3b8') + _hd('📝 DRAFT','#d97706','center') + _hd('สถานะตรวจ','#94a3b8')
-           + (_edit?_hd('ตรวจ','#94a3b8','center'):'') + _hd('📋 ตัวจริง','#16a34a','center');
+           + (_edit?_hd('🤖 AI','#4338ca','center'):'') + (_edit?_hd('ตรวจ','#94a3b8','center'):'') + _hd('📋 ตัวจริง','#16a34a','center');
   chkHtml += DOC_TYPES.map(t=>{
     const mk = stage => {
       const n = all.filter(f=>f.dtype===t.key && f.stage===stage).length;
@@ -1517,19 +1517,21 @@ async function loadDocList(){
     };
     /* สถานะตรวจ DRAFT + ปุ่ม approve/reject */
     const rv = draftReview(t.key);
-    let revChip = '<span style="font-size:10px;color:#cbd5e0;">—</span>', revBtns = '';
+    let revChip = '<span style="font-size:10px;color:#cbd5e0;">—</span>', revBtns = '', aiBtn = '';
     if(rv.state!=='none'){
       if(rv.state==='approved') revChip=`<span style="font-size:10px;font-weight:700;color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:2px 8px;">✅ ผ่าน${rv.by?' · '+woH(rv.by):''}</span>`;
       else if(rv.state==='rejected') revChip=`<span title="${woH(rv.reason||'')}" style="font-size:10px;font-weight:700;color:#b91c1c;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:2px 8px;">✗ ตีกลับ${rv.reason?': '+woH(rv.reason).slice(0,30):''}</span>`;
       else revChip=`<span style="font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:2px 8px;">⏳ รอตรวจ</span>`;
       if(_edit){
         const _apOn=rv.state==='approved', _rjOn=rv.state==='rejected';
-        revBtns=`<button type="button" onclick="checkDocAI('${t.key}')" title="🤖 ให้ AI ช่วยตรวจ (เทียบเบอร์ตู้/CONSIGNEE กับใบคำสั่ง)" style="border:none;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:6px;padding:3px 6px;font-size:11px;font-weight:800;cursor:pointer;margin-right:3px;">🤖</button><button type="button" onclick="reviewDoc('${t.key}','approved')" title="${_apOn?'กดซ้ำ = ยกเลิกอนุมัติ':'อนุมัติ'}" style="border:none;background:${_apOn?'#16a34a':'#e2e8f0'};color:${_apOn?'#fff':'#16a34a'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;margin-right:3px;">✓</button><button type="button" onclick="reviewDoc('${t.key}','rejected')" title="${_rjOn?'กดซ้ำ = ยกเลิกตีกลับ':'ตีกลับ'}" style="border:none;background:${_rjOn?'#dc2626':'#e2e8f0'};color:${_rjOn?'#fff':'#dc2626'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;">✗</button>`;
+        aiBtn=`<button type="button" onclick="checkDocAI('${t.key}')" title="🤖 ให้ AI ช่วยตรวจ (เทียบเบอร์ตู้/CONSIGNEE กับใบคำสั่ง)" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:800;cursor:pointer;">🤖</button>`;
+        revBtns=`<button type="button" onclick="reviewDoc('${t.key}','approved')" title="${_apOn?'กดซ้ำ = ยกเลิกอนุมัติ':'อนุมัติ'}" style="border:none;background:${_apOn?'#16a34a':'#e2e8f0'};color:${_apOn?'#fff':'#16a34a'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;margin-right:3px;">✓</button><button type="button" onclick="reviewDoc('${t.key}','rejected')" title="${_rjOn?'กดซ้ำ = ยกเลิกตีกลับ':'ตีกลับ'}" style="border:none;background:${_rjOn?'#dc2626':'#e2e8f0'};color:${_rjOn?'#fff':'#dc2626'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;">✗</button>`;
       }
     }
     return _cell(`<span style="font-size:11.5px;font-weight:700;color:#374151;">${t.label}</span>`)
          + _cell(mk('DRAFT'),'center')
          + _cell(revChip)
+         + (_edit?_cell(aiBtn,'center'):'')
          + (_edit?_cell(revBtns,'center'):'')
          + _cell(mk('FINAL'),'center');
   }).join('');
