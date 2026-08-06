@@ -1707,12 +1707,12 @@ async function loadDocList(){
   window._docDraftAllApproved = DOC_TYPES.every(t=>draftReview(t.key).state==='approved');
   /* checklist: ตาราง คอลัมน์ตรงกันทุกแถว — เอกสาร | DRAFT | สถานะตรวจ | (ปุ่มตรวจ) | ตัวจริง */
   const _edit = canEditWO();
-  const _cols = _edit ? '104px 100px minmax(110px,1fr) 66px 60px 100px' : '116px 104px minmax(120px,1fr) 66px 104px';
+  const _cols = _edit ? '104px 100px 66px minmax(110px,1fr) 60px 100px' : '116px 104px 66px minmax(120px,1fr) 104px';
   const _cell = (inner,align='')=>`<div style="border-bottom:1px solid #f1f5f9;padding:5px 0;${align?'text-align:'+align+';':''}min-width:0;">${inner}</div>`;
   const _hd = (txt,color,align)=>`<div style="font-size:9px;font-weight:800;letter-spacing:.4px;color:${color};padding-bottom:3px;border-bottom:2px solid #eef2f6;${align?'text-align:'+align+';':''}">${txt}</div>`;
   let chkHtml = `<div style="display:grid;grid-template-columns:${_cols};gap:0 10px;align-items:center;width:100%;">`;
-  chkHtml += _hd('เอกสาร','#94a3b8') + _hd('📝 DRAFT','#d97706','center') + _hd('สถานะตรวจ','#94a3b8')
-           + _hd('🤖 BY AI','#4338ca','center') + (_edit?_hd('ตรวจ','#94a3b8','center'):'') + _hd('📋 ตัวจริง','#16a34a','center');
+  chkHtml += _hd('เอกสาร','#94a3b8') + _hd('📝 DRAFT','#d97706','center') + _hd('🤖 BY AI','#4338ca','center')
+           + _hd('สถานะตรวจ','#94a3b8') + (_edit?_hd('ตรวจ','#94a3b8','center'):'') + _hd('📋 ตัวจริง','#16a34a','center');
   chkHtml += DOC_TYPES.map(t=>{
     const mk = stage => {
       const n = all.filter(f=>f.dtype===t.key && f.stage===stage).length;
@@ -1746,8 +1746,8 @@ async function loadDocList(){
     else if(_aiSt==='fail') aiBadge=`<div style="margin-top:2px;"><span onclick="showAiDetail('${t.key}')" title="ดูผลตรวจ + พรีวิวย้อนหลัง (ไม่เรียก AI ใหม่)" style="cursor:pointer;font-size:8px;font-weight:800;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:1px 4px;">✗ไม่ผ่าน</span></div>`;
     return _cell(`<span style="font-size:11.5px;font-weight:700;color:#374151;">${t.label}</span>`)
          + _cell(mk('DRAFT'),'center')
-         + _cell(revChip)
          + _cell((aiBtn?aiBtn+' ':'')+aiBadge || '<span style="font-size:9px;color:#cbd5e0;">—</span>','center')
+         + _cell(revChip)
          + (_edit?_cell(revBtns,'center'):'')
          + _cell(mk('FINAL'),'center');
   }).join('');
