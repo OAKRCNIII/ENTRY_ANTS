@@ -1449,10 +1449,16 @@ async function checkDocAI(type){
       return `<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' '+lb+' '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(docV||'-')} · ใบคำสั่ง: ${woH(woV||'-')}</span>`}</div>`; };
     if(wtFields.includes('nw')) html+=wtRow('PHYTO NW', wt.nw_doc, wt.nw_wo);
     if(wtFields.includes('gw')) html+=wtRow('PHYTO GW', wt.gw_doc, wt.gw_wo);
-    /* จำนวน BUNDLE — แสดงเมื่อเอกสารมีตัวเลข bundle */
+    /* จำนวน BUNDLE — เลขทุกจุดในเอกสารต้องตรงใบคำสั่ง (เจอตัวไม่ตรง = ผิด) */
     const bd=d.bundles||{};
-    if(bd.doc){ const m=numMatch(bd.doc,bd.wo);
-      html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' จำนวน BUNDLE '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(bd.doc||'-')} · ใบคำสั่ง: ${woH(bd.wo||'-')}</span>`}</div>`; }
+    const bdDoc=Array.isArray(bd.doc)?bd.doc:(bd.doc?[bd.doc]:[]);
+    if(bdDoc.length && bd.wo){
+      const bad=[...new Set(bdDoc.filter(x=>!numMatch(x,bd.wo)))];
+      const ok=bad.length===0;
+      html+=`<div style="margin-bottom:4px;">${chip((ok?'✅':'⚠️')+' จำนวน BUNDLE '+(ok?'ตรง ('+woH(bd.wo)+')':'ผิด!'), ok)}`;
+      if(!ok) html+=`<span style="font-size:11px;color:#b91c1c;"> เจอเลขไม่ตรง <b>${bad.map(woH).join(', ')}</b> · ควรเป็น ${woH(bd.wo)}</span>`;
+      html+=`</div>`;
+    }
     html+=`<div style="font-size:9.5px;color:#94a3b8;margin-top:6px;">🤖 AI ช่วยตรวจเบื้องต้น — กรุณาตรวจซ้ำก่อน APPROVE โดยเฉพาะเลข/เบอร์ตู้</div>`;
     /* เก็บข้อมูลไว้ทำ PREVIEW ไฮไลท์ (เขียว=ตู้ตรง / แดง=ตู้เกิน-ผิด) */
     const _na=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
