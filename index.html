@@ -1452,11 +1452,12 @@ async function checkDocAI(type){
     /* จำนวน BUNDLE — เลขทุกจุดในเอกสารต้องตรงใบคำสั่ง (เจอตัวไม่ตรง = ผิด) */
     const bd=d.bundles||{};
     const bdDoc=Array.isArray(bd.doc)?bd.doc:(bd.doc?[bd.doc]:[]);
+    let _bundleBad=[];
     if(bdDoc.length && bd.wo){
-      const bad=[...new Set(bdDoc.filter(x=>!numMatch(x,bd.wo)))];
-      const ok=bad.length===0;
+      _bundleBad=[...new Set(bdDoc.filter(x=>!numMatch(x,bd.wo)))];
+      const ok=_bundleBad.length===0;
       html+=`<div style="margin-bottom:4px;">${chip((ok?'✅':'⚠️')+' จำนวน BUNDLE '+(ok?'ตรง ('+woH(bd.wo)+')':'ผิด!'), ok)}`;
-      if(!ok) html+=`<span style="font-size:11px;color:#b91c1c;"> เจอเลขไม่ตรง <b>${bad.map(woH).join(', ')}</b> · ควรเป็น ${woH(bd.wo)}</span>`;
+      if(!ok) html+=`<span style="font-size:11px;color:#b91c1c;"> เจอเลขไม่ตรง <b>${_bundleBad.map(woH).join(', ')}</b> · ควรเป็น ${woH(bd.wo)}</span>`;
       html+=`</div>`;
     }
     html+=`<div style="font-size:9.5px;color:#94a3b8;margin-top:6px;">🤖 AI ช่วยตรวจเบื้องต้น — กรุณาตรวจซ้ำก่อน APPROVE โดยเฉพาะเลข/เบอร์ตู้</div>`;
@@ -1465,7 +1466,7 @@ async function checkDocAI(type){
     const _extraSet=new Set((c.extra||[]).map(_na));
     const _docList=c.doc||[];
     window._aiPreviewData={ inv, type, folder:lf.folder, name:lf.name, panelHtml:html,
-      targets:{ red:(c.extra||[]).map(_na).filter(Boolean),
+      targets:{ red:[ ...(c.extra||[]).map(_na), ..._bundleBad.map(x=>_na(x)+'BUNDLE') ].filter(Boolean),
                 green:_docList.map(_na).filter(x=>x&&!_extraSet.has(x)) } };
     html+=`<div style="margin-top:8px;"><button type="button" onclick="openAiPreview()" style="background:#4338ca;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:800;cursor:pointer;">🖼️ PREVIEW BY AI — ดูเอกสาร + ไฮไลท์</button></div>`;
     box.innerHTML=html;
