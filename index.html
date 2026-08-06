@@ -1434,8 +1434,8 @@ async function checkDocAI(type){
     html+=`<div style="margin-bottom:4px;">${chip((cons.match?'✅':'⚠️')+' CONSIGNEE '+(cons.match?'ตรง':'ตรวจสอบ'), !!cons.match)}`;
     if(!cons.match) html+=`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH((cons.doc||'').slice(0,40))} · ใบคำสั่ง: ${woH((cons.wo||'').slice(0,40))}</span>`;
     html+=`</div>`;
-    /* vessel — เทียบแบบตัด voyage (V.623N ↔ 623) · ข้าม IPPC/ใบฉีดยุง (ไม่มีชื่อเรือ) */
-    if((ves.wo||ves.doc) && !NO_VESSEL_DOCS.includes(type)){
+    /* vessel — เช็คเฉพาะเมื่อเอกสารมีชื่อเรือ (PHYTO อาจไม่มี) · ข้าม IPPC/ใบฉีดยุง */
+    if(ves.doc && !NO_VESSEL_DOCS.includes(type)){
       const vOk = vesselMatch(ves.doc,ves.wo); _pass = _pass && vOk;
       html+=`<div style="margin-bottom:4px;">${chip((vOk?'✅':'⚠️')+' ชื่อเรือ '+(vOk?'ตรง':'ตรวจสอบ'), vOk)}${vOk?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(ves.doc||'-')} · ใบคำสั่ง: ${woH(ves.wo||'-')}</span>`}</div>`;
     }
@@ -1443,7 +1443,7 @@ async function checkDocAI(type){
     const iv=d.invoice_date||{}, vd=d.vessel_date||{};
     if(iv.doc){ const m=dateMatch(iv.doc,iv.wo); _pass = _pass && m;
       html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' วันที่อินวอยซ์ '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(iv.doc||'-')} · ใบคำสั่ง: ${woH(iv.wo||'-')}</span>`}</div>`; }
-    if(vd.doc && !NO_VESSEL_DOCS.includes(type)){ const m=dateMatch(vd.doc,vd.wo); _pass = _pass && m;
+    if(vd.doc && !NO_VDATE_DOCS.includes(type)){ const m=dateMatch(vd.doc,vd.wo); _pass = _pass && m;
       html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' วันที่เรือ '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(vd.doc||'-')} · ใบคำสั่ง: ${woH(vd.wo||'-')}</span>`}</div>`; }
     /* น้ำหนัก NW/GW — PHYTO ตรวจ NW+GW · C/O ตรวจ GW (= PHYTO GW) */
     const wt=d.weight||{}, wtFields=(WT_DOCS[type]||[]);
@@ -1485,8 +1485,10 @@ async function checkDocAI(type){
 }
 /* เอกสารที่มีเบอร์ตู้จริง (คุณ RCN ระบุ) — ที่เหลือ (INVOICE, C/O) ตรวจแค่ CONSIGNEE/ชื่อเรือ */
 const CTR_DOCS = ['PACKING_LIST','BL','CO','PHYTO','IPPC','MOSQUITO'];
-/* เอกสารที่ไม่มีชื่อเรือ → ไม่ต้องตรวจชื่อเรือ */
+/* ไม่ตรวจชื่อเรือ (IPPC/ใบฉีดยุง) · PHYTO ตรวจเฉพาะเมื่อเอกสารมีชื่อเรือ */
 const NO_VESSEL_DOCS = ['IPPC','MOSQUITO'];
+/* ไม่ตรวจวันที่เรือ — PHYTO/IPPC/ใบฉีดยุง ไม่มีวันที่เรือ (มีแต่วันที่อินวอยซ์) */
+const NO_VDATE_DOCS = ['PHYTO','IPPC','MOSQUITO'];
 /* ตรวจน้ำหนัก NW/GW: PHYTO ตรวจทั้งคู่ · C/O ตรวจ GW (= PHYTO GW ที่โชว์ใน C/O) */
 const WT_DOCS = { PHYTO:['nw','gw'], CO:['gw'] };
 /* เทียบตัวเลข (น้ำหนัก) — ตัดคอมม่า/ช่องว่าง แล้วเทียบค่า (คลาด ≤1 = ตรง) */
