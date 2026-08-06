@@ -1489,6 +1489,21 @@ function _showAiResult(type, inv, lf, d, save){
       if(!ok) html+=`<span style="font-size:11px;color:#b91c1c;"> เจอเลขไม่ตรง <b>${_bundleBad.map(woH).join(', ')}</b> · ควรเป็น ${woH(bd.wo)}</span>`;
       html+=`</div>`;
     }
+    /* M3 — PHYTO: ใบคำสั่งโชว์ M3 → เอกสารต้องมี (ตรงค่า) · ไม่โชว์ → เอกสารต้องไม่มี */
+    if(M3_DOCS.includes(type)){
+      const m3=d.m3||{}; const hasM3=!!(m3.doc && String(m3.doc).trim());
+      if(m3.wo_show){
+        let m3Ok, m3Txt;
+        if(!hasM3){ m3Ok=false; m3Txt='ควรมี M3 แต่ไม่พบในเอกสาร'; }
+        else if(m3.wo_value && !numMatch(m3.doc,m3.wo_value)){ m3Ok=false; m3Txt='M3 ไม่ตรง · เอกสาร: '+woH(m3.doc)+' · ใบคำสั่ง: '+woH(m3.wo_value); }
+        else { m3Ok=true; m3Txt='M3 '+(m3.wo_value?('ตรง ('+woH(m3.doc)+')'):('มี ('+woH(m3.doc)+')')); }
+        _pass = _pass && m3Ok;
+        html+=`<div style="margin-bottom:4px;">${chip((m3Ok?'✅':'⚠️')+' '+ (m3Ok?m3Txt:'M3'), m3Ok)}${m3Ok?'':`<span style="font-size:10.5px;color:#b91c1c;"> · ${woH(m3Txt)}</span>`}</div>`;
+      }else{
+        const m3Ok=!hasM3; _pass = _pass && m3Ok;
+        html+=`<div style="margin-bottom:4px;">${chip((m3Ok?'✅':'⚠️')+' M3 '+(m3Ok?'ไม่โชว์ (ถูกต้อง)':'ผิด!'), m3Ok)}${m3Ok?'':`<span style="font-size:10.5px;color:#b91c1c;"> · ใบคำสั่งสั่งไม่โชว์ M3 แต่เจอ ${woH(m3.doc)} ในเอกสาร</span>`}</div>`;
+      }
+    }
     /* สรุปผ่าน/ไม่ผ่าน (ขั้นที่ 1 — PROVED BY AI) */
     html+=`<div style="margin-top:8px;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:800;${_pass?'background:#dcfce7;color:#166534;border:1px solid #86efac;':'background:#fef3c7;color:#b45309;border:1px solid #fcd34d;'}">${_pass?'✅ PROVED BY AI — ผ่านครบทุกด่าน (ขั้นที่ 1) · รอคนตรวจอนุมัติ (ขั้นที่ 2)':'⚠️ ยังไม่ผ่าน AI — มีจุดต้องตรวจสอบด้านบน'}</div>`;
     html+=`<div style="font-size:9.5px;color:#94a3b8;margin-top:6px;">🤖 AI ช่วยตรวจเบื้องต้น — กรุณาตรวจซ้ำก่อน APPROVE โดยเฉพาะเลข/เบอร์ตู้</div>`;
@@ -1525,6 +1540,8 @@ const CTR_DOCS = ['PACKING_LIST','BL','CO','PHYTO','IPPC','MOSQUITO'];
 const NO_VESSEL_DOCS = ['IPPC','MOSQUITO'];
 /* ไม่ตรวจวันที่เรือ — PHYTO/IPPC/ใบฉีดยุง ไม่มีวันที่เรือ (มีแต่วันที่อินวอยซ์) */
 const NO_VDATE_DOCS = ['PHYTO','IPPC','MOSQUITO'];
+/* ตรวจ M3 ตามใบคำสั่ง (โชว์/ไม่โชว์ + ค่า) — PHYTO */
+const M3_DOCS = ['PHYTO'];
 /* ตรวจน้ำหนัก NW/GW: PHYTO ตรวจทั้งคู่ · C/O ตรวจ GW (= PHYTO GW ที่โชว์ใน C/O) */
 const WT_DOCS = { PHYTO:['nw','gw'], CO:['gw'] };
 /* เทียบตัวเลข (น้ำหนัก) — ตัดคอมม่า/ช่องว่าง แล้วเทียบค่า (คลาด ≤1 = ตรง) */
