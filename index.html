@@ -743,6 +743,9 @@ const ROLE_TABS = {
 };
 /* role ที่แก้ใบคำสั่งได้ */
 const canEditWO = () => (USER_ROLE==='admin' || USER_ROLE==='doc_wo');
+/* กด AI CHECK ได้เฉพาะ RCN (คนอื่นเห็นผล + กดดูย้อนหลัง/พรีวิวได้ แต่กดตรวจใหม่ไม่ได้) */
+const AI_RUN_USERS = ['OAK_THIRA'];
+const canRunAI = () => AI_RUN_USERS.includes(LOGGED_USER);
 /* role ที่อัพได้เฉพาะ DRAFT (ซ่อน FINAL + ปุ่มลบ + Dashboard) */
 const isDraftOnly = () => (USER_ROLE==='doc_draft' || USER_ROLE==='doc_wo');
 const sb = supabase.createClient(SB_URL, SB_KEY);
@@ -1391,7 +1394,7 @@ async function mergeDocsEntry(stage){
 
 /* 🤖 ให้ AI ช่วยตรวจเอกสาร DRAFT — AI อ่าน + โค้ดเทียบเบอร์ตู้/CONSIGNEE (เฉพาะ OAK/PLA) */
 async function checkDocAI(type){
-  if(!canEditWO()) return;
+  if(!canRunAI()) return;   /* กดตรวจ AI ได้เฉพาะ RCN */
   const inv = (window._docReviewInv || document.getElementById('docInv').value || '').trim();
   if(!inv) return;
   const lf = (window._docMergeFiles && window._docMergeFiles.DRAFT || []).find(f=>f.label===docTypeLabel(type));
@@ -1704,12 +1707,12 @@ async function loadDocList(){
   window._docDraftAllApproved = DOC_TYPES.every(t=>draftReview(t.key).state==='approved');
   /* checklist: ตาราง คอลัมน์ตรงกันทุกแถว — เอกสาร | DRAFT | สถานะตรวจ | (ปุ่มตรวจ) | ตัวจริง */
   const _edit = canEditWO();
-  const _cols = _edit ? '110px 108px minmax(120px,1fr) 44px 62px 108px' : '120px 108px minmax(130px,1fr) 108px';
+  const _cols = _edit ? '104px 100px minmax(110px,1fr) 66px 60px 100px' : '116px 104px minmax(120px,1fr) 66px 104px';
   const _cell = (inner,align='')=>`<div style="border-bottom:1px solid #f1f5f9;padding:5px 0;${align?'text-align:'+align+';':''}min-width:0;">${inner}</div>`;
   const _hd = (txt,color,align)=>`<div style="font-size:9px;font-weight:800;letter-spacing:.4px;color:${color};padding-bottom:3px;border-bottom:2px solid #eef2f6;${align?'text-align:'+align+';':''}">${txt}</div>`;
   let chkHtml = `<div style="display:grid;grid-template-columns:${_cols};gap:0 10px;align-items:center;width:100%;">`;
   chkHtml += _hd('เอกสาร','#94a3b8') + _hd('📝 DRAFT','#d97706','center') + _hd('สถานะตรวจ','#94a3b8')
-           + (_edit?_hd('🤖 AI','#4338ca','center'):'') + (_edit?_hd('ตรวจ','#94a3b8','center'):'') + _hd('📋 ตัวจริง','#16a34a','center');
+           + _hd('🤖 BY AI','#4338ca','center') + (_edit?_hd('ตรวจ','#94a3b8','center'):'') + _hd('📋 ตัวจริง','#16a34a','center');
   chkHtml += DOC_TYPES.map(t=>{
     const mk = stage => {
       const n = all.filter(f=>f.dtype===t.key && f.stage===stage).length;
@@ -1729,9 +1732,11 @@ async function loadDocList(){
       if(rv.state==='approved') revChip=`<span style="font-size:10px;font-weight:700;color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:2px 8px;">✅ ผ่าน${rv.by?' · '+woH(rv.by):''}</span>`;
       else if(rv.state==='rejected') revChip=`<span title="${woH(rv.reason||'')}" style="font-size:10px;font-weight:700;color:#b91c1c;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:2px 8px;">✗ ตีกลับ${rv.reason?': '+woH(rv.reason).slice(0,30):''}</span>`;
       else revChip=`<span style="font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:2px 8px;">⏳ รอตรวจ</span>`;
+      if(canRunAI()){   /* ปุ่มกดตรวจ AI — เฉพาะ RCN */
+        aiBtn=`<button type="button" onclick="checkDocAI('${t.key}')" title="🤖 ให้ AI ช่วยตรวจ (เทียบเบอร์ตู้/CONSIGNEE กับใบคำสั่ง)" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:800;cursor:pointer;">🤖</button>`;
+      }
       if(_edit){
         const _apOn=rv.state==='approved', _rjOn=rv.state==='rejected';
-        aiBtn=`<button type="button" onclick="checkDocAI('${t.key}')" title="🤖 ให้ AI ช่วยตรวจ (เทียบเบอร์ตู้/CONSIGNEE กับใบคำสั่ง)" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:800;cursor:pointer;">🤖</button>`;
         revBtns=`<button type="button" onclick="reviewDoc('${t.key}','approved')" title="${_apOn?'กดซ้ำ = ยกเลิกอนุมัติ':'อนุมัติ'}" style="border:none;background:${_apOn?'#16a34a':'#e2e8f0'};color:${_apOn?'#fff':'#16a34a'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;margin-right:3px;">✓</button><button type="button" onclick="reviewDoc('${t.key}','rejected')" title="${_rjOn?'กดซ้ำ = ยกเลิกตีกลับ':'ตีกลับ'}" style="border:none;background:${_rjOn?'#dc2626':'#e2e8f0'};color:${_rjOn?'#fff':'#dc2626'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;">✗</button>`;
       }
     }
@@ -1742,7 +1747,7 @@ async function loadDocList(){
     return _cell(`<span style="font-size:11.5px;font-weight:700;color:#374151;">${t.label}</span>`)
          + _cell(mk('DRAFT'),'center')
          + _cell(revChip)
-         + (_edit?_cell(aiBtn+aiBadge,'center'):'')
+         + _cell((aiBtn?aiBtn+' ':'')+aiBadge || '<span style="font-size:9px;color:#cbd5e0;">—</span>','center')
          + (_edit?_cell(revBtns,'center'):'')
          + _cell(mk('FINAL'),'center');
   }).join('');
