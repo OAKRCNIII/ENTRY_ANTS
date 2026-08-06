@@ -964,6 +964,7 @@ async function showDocWoView(){
       ${cell('วันที่เรือ',d.vessel_date)}
       ${cell('PHYTO NW',woFmtNum(d.nw))}
       ${cell('PHYTO GW',woFmtNum(d.gw))}
+      ${cell('จำนวน BUNDLE',d.bundles)}
       ${cell('M3',d.show_m3?('โชว์'+(d.m3_value?' · '+d.m3_value+' M³':'')):'ไม่โชว์')}
     </div>
     ${d.containers?`<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1.4fr;gap:12px;">
@@ -1118,6 +1119,7 @@ function renderWorkOrder(){
       <label style="font-size:11px;font-weight:700;color:#334155;">วันที่เรือ<input id="wo_vdate" ${RO} value="${woH(d.vessel_date)}" placeholder="วว/ดด/ปปปป" style="${inpBase}${manualBg}margin-top:3px;"></label>
       <label style="font-size:11px;font-weight:700;color:#334155;">PHYTO NW<input id="wo_nw" ${RO} oninput="woNumInput(this)" value="${woH(woFmtNum(d.nw))}" style="${inpBase}${manualBg}margin-top:3px;"></label>
       <label style="font-size:11px;font-weight:700;color:#334155;">PHYTO GW<input id="wo_gw" ${RO} oninput="woNumInput(this)" value="${woH(woFmtNum(d.gw))}" style="${inpBase}${manualBg}margin-top:3px;"></label>
+      <label style="font-size:11px;font-weight:700;color:#334155;">จำนวน BUNDLE<input id="wo_bundles" ${RO} value="${woH(d.bundles)}" placeholder="เช่น 600" style="${inpBase}${manualBg}margin-top:3px;"></label>
       <div style="grid-column:1/3;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:2px;">
         <label style="font-size:11px;font-weight:700;color:#334155;display:flex;align-items:center;gap:8px;"><input type="checkbox" id="wo_m3" ${edit?'':'disabled'} ${d.show_m3?'checked':''} onchange="woM3Toggle()" style="width:16px;height:16px;accent-color:#1e40af;">โชว์ M3 ในเอกสาร</label>
         <span id="wo_m3_wrap" style="display:${d.show_m3?'inline-flex':'none'};align-items:center;gap:6px;">
@@ -1168,7 +1170,7 @@ function woCollect(){
   if(document.getElementById('wo_consignee')){
     return { invoice_no:g('wo_inv'), invoice_date:g('wo_date'), consignee:g('wo_consignee'),
       vessel_name:g('wo_vessel'), vessel_date:g('wo_vdate'), nw:g('wo_nw'), gw:g('wo_gw'),
-      show_m3:g('wo_m3'), m3_value:g('wo_m3_val'), containers:g('wo_ctr') };
+      show_m3:g('wo_m3'), m3_value:g('wo_m3_val'), bundles:g('wo_bundles'), containers:g('wo_ctr') };
   }
   return _woData || {};
 }
@@ -1216,6 +1218,7 @@ function printWorkOrder(){
       ${row('วันที่เรือ', d.vessel_date)}
       ${row('PHYTO NW', woFmtNum(d.nw))}
       ${row('PHYTO GW', woFmtNum(d.gw))}
+      ${row('จำนวน BUNDLE', d.bundles)}
       ${row('M3', d.show_m3?('✔ โชว์'+(d.m3_value?' · '+d.m3_value+' M³':'')):'✘ ไม่โชว์')}
     </table>
     <div class="sec">เบอร์ตู้ (${ctrs.length} ตู้)</div>
@@ -1261,6 +1264,7 @@ async function saveWorkOrder(){
     gw: document.getElementById('wo_gw').value.trim() || null,
     show_m3: document.getElementById('wo_m3').checked,
     m3_value: document.getElementById('wo_m3').checked ? (document.getElementById('wo_m3_val')?.value.trim() || null) : null,
+    bundles: document.getElementById('wo_bundles')?.value.trim() || null,
     containers: document.getElementById('wo_ctr').value.trim() || null,
     updated_by: LOGGED_USER || '?',
     updated_at: new Date().toISOString(),
@@ -1445,6 +1449,10 @@ async function checkDocAI(type){
       return `<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' '+lb+' '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(docV||'-')} · ใบคำสั่ง: ${woH(woV||'-')}</span>`}</div>`; };
     if(wtFields.includes('nw')) html+=wtRow('PHYTO NW', wt.nw_doc, wt.nw_wo);
     if(wtFields.includes('gw')) html+=wtRow('PHYTO GW', wt.gw_doc, wt.gw_wo);
+    /* จำนวน BUNDLE — แสดงเมื่อเอกสารมีตัวเลข bundle */
+    const bd=d.bundles||{};
+    if(bd.doc){ const m=numMatch(bd.doc,bd.wo);
+      html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' จำนวน BUNDLE '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(bd.doc||'-')} · ใบคำสั่ง: ${woH(bd.wo||'-')}</span>`}</div>`; }
     html+=`<div style="font-size:9.5px;color:#94a3b8;margin-top:6px;">🤖 AI ช่วยตรวจเบื้องต้น — กรุณาตรวจซ้ำก่อน APPROVE โดยเฉพาะเลข/เบอร์ตู้</div>`;
     /* เก็บข้อมูลไว้ทำ PREVIEW ไฮไลท์ (เขียว=ตู้ตรง / แดง=ตู้เกิน-ผิด) */
     const _na=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -1504,6 +1512,7 @@ async function openAiPreview(){
     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
     pagesEl.innerHTML='';
     const T=d.targets||{red:[],green:[]};
+    let hlTotal=0, hasText=false;
     for(let i=1;i<=pdf.numPages;i++){
       const page=await pdf.getPage(i);
       const scale=1.4, vp=page.getViewport({scale});
@@ -1513,19 +1522,31 @@ async function openAiPreview(){
       wrap.appendChild(cv); pagesEl.appendChild(wrap);
       await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise;
       const tc=await page.getTextContent();
-      tc.items.forEach(it=>{
-        const s=String(it.str||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(s.length<4) return;
-        let col=null;
-        if(T.red.some(t=>t&&s.includes(t))) col='rgba(239,68,68,.38)';
-        else if(T.green.some(t=>t&&s.includes(t))) col='rgba(34,197,94,.32)';
-        if(!col) return;
+      /* ต่อข้อความทั้งหน้า + จำ item ของแต่ละตัวอักษร (รองรับ PDF ที่แยกตัวอักษร/มีช่องว่างแทรก) */
+      let pageNorm=''; const charItem=[];
+      tc.items.forEach((it,idx)=>{
+        const s=String(it.str||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+        if(s) hasText=true;
+        for(let k=0;k<s.length;k++){ pageNorm+=s[k]; charItem.push(idx); }
+      });
+      const markItem={};
+      const mark=(str,color)=>{ if(!str||str.length<4) return;
+        let from=0; while(true){ const at=pageNorm.indexOf(str,from); if(at<0)break;
+          for(let k=at;k<at+str.length;k++) markItem[charItem[k]]=color; from=at+str.length; } };
+      (T.green||[]).forEach(t=>mark(t,'g'));
+      (T.red||[]).forEach(t=>mark(t,'r'));   /* แดงทับเขียวถ้าซ้อน */
+      tc.items.forEach((it,idx)=>{
+        const c=markItem[idx]; if(!c) return; hlTotal++;
+        const col = c==='r'?'rgba(239,68,68,.42)':'rgba(34,197,94,.32)';
         const tx=pdfjsLib.Util.transform(vp.transform, it.transform);
         const fh=Math.hypot(tx[2],tx[3]); const w=(it.width||0)*scale;
         const hl=document.createElement('div');
-        hl.style.cssText=`position:absolute;left:${tx[4]-1}px;top:${tx[5]-fh-1}px;width:${w+2}px;height:${fh+2}px;background:${col};border-radius:2px;pointer-events:none;`;
+        hl.style.cssText=`position:absolute;left:${tx[4]-1}px;top:${tx[5]-fh-1}px;width:${Math.max(w,3)+2}px;height:${fh+2}px;background:${col};border-radius:2px;pointer-events:none;`;
         wrap.appendChild(hl);
       });
     }
+    if(!hasText){ const n=document.createElement('div'); n.style.cssText='font-size:11px;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;margin-top:4px;'; n.textContent='ℹ️ ไฟล์นี้เป็นสแกน/รูป (ไม่มีชั้นข้อความ) — ไฮไลท์อัตโนมัติไม่ได้ ดูจุดผิดที่แผงซ้าย'; pagesEl.insertBefore(n, pagesEl.firstChild); }
+    else if(hlTotal===0 && (T.red||[]).length){ const n=document.createElement('div'); n.style.cssText='font-size:11px;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;margin-top:4px;'; n.textContent='ℹ️ หาตำแหน่งเบอร์ตู้ในไฟล์อัตโนมัติไม่เจอ (ข้อความเรียงไม่ปกติ) — ดูจุดผิดที่แผงซ้าย'; pagesEl.insertBefore(n, pagesEl.firstChild); }
   }catch(e){ pagesEl.innerHTML='<div style="padding:24px;color:#b91c1c;">โหลด PDF ไม่สำเร็จ: '+woH(String(e))+'</div>'; }
 }
 /* เทียบชื่อเรือ: ตัด "V." หน้าเลข voyage และตัวอักษรท้าย (V.623N → 623) */
