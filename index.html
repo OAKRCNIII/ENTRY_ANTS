@@ -1466,7 +1466,8 @@ async function checkDocAI(type){
     const _extraSet=new Set((c.extra||[]).map(_na));
     const _docList=c.doc||[];
     window._aiPreviewData={ inv, type, folder:lf.folder, name:lf.name, panelHtml:html,
-      targets:{ red:[ ...(c.extra||[]).map(_na), ..._bundleBad.map(x=>_na(x)+'BUNDLE') ].filter(Boolean),
+      targets:{ red:(c.extra||[]).map(_na).filter(Boolean),
+                redNum:_bundleBad.map(_na).filter(Boolean),   /* เลข bundle ที่ผิด (จับแบบตัวเลขเดี่ยว) */
                 green:_docList.map(_na).filter(x=>x&&!_extraSet.has(x)) } };
     html+=`<div style="margin-top:8px;"><button type="button" onclick="openAiPreview()" style="background:#4338ca;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:800;cursor:pointer;">🖼️ PREVIEW BY AI — ดูเอกสาร + ไฮไลท์</button></div>`;
     box.innerHTML=html;
@@ -1540,8 +1541,16 @@ async function openAiPreview(){
       const mark=(str,color)=>{ if(!str||str.length<4) return;
         let from=0; while(true){ const at=pageNorm.indexOf(str,from); if(at<0)break;
           for(let k=at;k<at+str.length;k++) markItem[charItem[k]]=color; from=at+str.length; } };
+      /* เลขสั้น (เช่นเลข bundle) — จับเฉพาะตัวเลขเดี่ยว ไม่ติดกับเลขอื่น กันโดนน้ำหนัก/ราคา */
+      const isD=ch=>ch>='0'&&ch<='9';
+      const markNum=(str,color)=>{ if(!str) return;
+        let from=0; while(true){ const at=pageNorm.indexOf(str,from); if(at<0)break;
+          const b=at>0?pageNorm[at-1]:'', a=(at+str.length<pageNorm.length)?pageNorm[at+str.length]:'';
+          if(!isD(b)&&!isD(a)){ for(let k=at;k<at+str.length;k++) markItem[charItem[k]]=color; }
+          from=at+str.length; } };
       (T.green||[]).forEach(t=>mark(t,'g'));
       (T.red||[]).forEach(t=>mark(t,'r'));   /* แดงทับเขียวถ้าซ้อน */
+      (T.redNum||[]).forEach(t=>markNum(t,'r'));
       tc.items.forEach((it,idx)=>{
         const c=markItem[idx]; if(!c) return; hlTotal++;
         const col = c==='r'?'rgba(239,68,68,.42)':'rgba(34,197,94,.32)';
