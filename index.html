@@ -1498,7 +1498,7 @@ async function loadDocList(){
   window._docDraftAllApproved = DOC_TYPES.every(t=>draftReview(t.key).state==='approved');
   /* checklist: ตาราง คอลัมน์ตรงกันทุกแถว — เอกสาร | DRAFT | สถานะตรวจ | (ปุ่มตรวจ) | ตัวจริง */
   const _edit = canEditWO();
-  const _cols = _edit ? '120px 92px minmax(130px,1fr) 44px 62px 92px' : '120px 96px minmax(140px,1fr) 96px';
+  const _cols = _edit ? '110px 108px minmax(120px,1fr) 44px 62px 108px' : '120px 108px minmax(130px,1fr) 108px';
   const _cell = (inner,align='')=>`<div style="border-bottom:1px solid #f1f5f9;padding:5px 0;${align?'text-align:'+align+';':''}min-width:0;">${inner}</div>`;
   const _hd = (txt,color,align)=>`<div style="font-size:9px;font-weight:800;letter-spacing:.4px;color:${color};padding-bottom:3px;border-bottom:2px solid #eef2f6;${align?'text-align:'+align+';':''}">${txt}</div>`;
   let chkHtml = `<div style="display:grid;grid-template-columns:${_cols};gap:0 10px;align-items:center;width:100%;">`;
@@ -1514,7 +1514,7 @@ async function loadDocList(){
       const canDL = canEditWO();   /* โหลดได้เฉพาะ OAK/PLA */
       const click = has&&lf&&canDL ? `onclick="openDoc('${lf.folder.replace(/'/g,"\\'")}','${lf.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')" title="คลิกเพื่อเปิด/โหลด"` : '';
       const clickable = has&&canDL;
-      return `<span ${click} style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`${clickable?'cursor:pointer;':''}background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?(clickable?'⬇️':'✓'):'○'} ${st.label}${ver}</span>`;
+      return `<span ${click} style="white-space:nowrap;display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;${has?`${clickable?'cursor:pointer;':''}background:${st.bg};color:${st.color};border:1px solid ${st.bd};`:'background:#f1f5f9;color:#cbd5e0;border:1px dashed #cbd5e0;'}">${has?(clickable?'⬇️':'✓'):'○'} ${st.label}${ver}</span>`;
     };
     /* สถานะตรวจ DRAFT + ปุ่ม approve/reject */
     const rv = draftReview(t.key);
