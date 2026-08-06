@@ -1340,9 +1340,23 @@ async function uploadDocs(){
     msg.style.color = '#b45309';
   }finally{
     btn.disabled = false;
-    loadDocList();
+    await loadDocList();
     loadDocHistory();
+    /* OAK อัพ → บอทตรวจอัตโนมัติเฉพาะ DRAFT ที่เพิ่งอัพในรอบนี้ (ไฟล์เดิมไม่แตะ) */
+    const draftTypes = fail ? [] : [...new Set(batches.filter(b=>b.stage==='DRAFT').map(b=>b.dtype))];
+    if(canRunAI() && draftTypes.length) autoAiCheck(draftTypes);
   }
+}
+/* บอทตรวจไฟล์ที่เพิ่งอัพ (ทีละใบ) — เฉพาะ OAK · ข้ามใบที่ยังไม่มีใบคำสั่ง */
+async function autoAiCheck(types){
+  if(!canRunAI() || !types.length) return;
+  const msg = document.getElementById('docMsg');
+  for(let i=0;i<types.length;i++){
+    const t=types[i];
+    if(msg){ msg.textContent=`🤖 AI กำลังตรวจ ${docTypeLabel(t)} (${i+1}/${types.length}) ...`; msg.style.color='#4338ca'; }
+    try{ await checkDocAI(t); }catch(e){}
+  }
+  if(msg){ msg.textContent='🤖 AI ตรวจไฟล์ที่เพิ่งอัพเสร็จแล้ว — ดูสถานะที่คอลัมน์ BY AI'; msg.style.color='#4338ca'; }
 }
 
 /* โหลด pdf-lib (lazy) แล้ว merge ไฟล์ล่าสุดของ stage → ดาวน์โหลด (ชื่อเหมือน INDEX) */
