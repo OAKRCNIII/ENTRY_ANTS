@@ -1393,6 +1393,13 @@ async function checkDocAI(type){
     const chip=(txt,ok)=>`<span style="font-size:11px;font-weight:700;border-radius:8px;padding:2px 8px;${ok?'color:#166534;background:#dcfce7;border:1px solid #86efac;':'color:#b45309;background:#fef3c7;border:1px solid #fcd34d;'}">${txt}</span>`;
     let html=`<div style="font-size:12px;font-weight:800;color:#4338ca;margin-bottom:6px;">🤖 ผลตรวจ ${woH(docTypeLabel(type))} · อินวอยซ์ ${woH(inv)}</div>`;
     if(!d.readable) html+=`<div style="margin-bottom:6px;">${chip('⚠️ อ่านเอกสารไม่ออก (สแกน/เบลอ) — ตรวจเอง',false)}</div>`;
+    /* ชนิดเอกสาร — จับอัพผิดช่อง */
+    const dt=d.detected_type||'OTHER';
+    const dtLabel=k=>k==='OTHER'?'อื่นๆ/ไม่ชัด':docTypeLabel(k);
+    const typeOk = dt===type;
+    html+=`<div style="margin-bottom:5px;">${chip((typeOk?'✅':'⛔')+' ชนิดเอกสาร '+(typeOk?'ตรงช่อง':'ผิดช่อง!'), typeOk)}`;
+    if(!typeOk) html+=`<span style="font-size:11px;color:#b91c1c;font-weight:700;"> · เอกสารดูเหมือน <b>${woH(dtLabel(dt))}</b> แต่อยู่ในช่อง ${woH(docTypeLabel(type))}</span>`;
+    html+=`</div>`;
     /* เบอร์ตู้ — เฉพาะเอกสารที่มีเบอร์ตู้จริง (PACKING/B-L/PHYTO/IPPC/ใบฉีดยุง) */
     if(CTR_DOCS.includes(type)){
       const ctrOk = (c.missing||[]).length===0;
@@ -1410,8 +1417,14 @@ async function checkDocAI(type){
     /* vessel — เทียบแบบตัด voyage (V.623N ↔ 623) */
     if(ves.wo||ves.doc){
       const vOk = vesselMatch(ves.doc,ves.wo);
-      html+=`<div>${chip((vOk?'✅':'⚠️')+' ชื่อเรือ '+(vOk?'ตรง':'ตรวจสอบ'), vOk)}${vOk?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(ves.doc||'-')} · ใบคำสั่ง: ${woH(ves.wo||'-')}</span>`}</div>`;
+      html+=`<div style="margin-bottom:4px;">${chip((vOk?'✅':'⚠️')+' ชื่อเรือ '+(vOk?'ตรง':'ตรวจสอบ'), vOk)}${vOk?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(ves.doc||'-')} · ใบคำสั่ง: ${woH(ves.wo||'-')}</span>`}</div>`;
     }
+    /* วันที่อินวอยซ์ / วันที่เรือ — แสดงเมื่อเอกสารมีวันที่นั้น */
+    const iv=d.invoice_date||{}, vd=d.vessel_date||{};
+    if(iv.doc){ const m=dateMatch(iv.doc,iv.wo);
+      html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' วันที่อินวอยซ์ '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(iv.doc||'-')} · ใบคำสั่ง: ${woH(iv.wo||'-')}</span>`}</div>`; }
+    if(vd.doc){ const m=dateMatch(vd.doc,vd.wo);
+      html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' วันที่เรือ '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(vd.doc||'-')} · ใบคำสั่ง: ${woH(vd.wo||'-')}</span>`}</div>`; }
     html+=`<div style="font-size:9.5px;color:#94a3b8;margin-top:6px;">🤖 AI ช่วยตรวจเบื้องต้น — กรุณาตรวจซ้ำก่อน APPROVE โดยเฉพาะเลข/เบอร์ตู้</div>`;
     box.innerHTML=html;
   }catch(e){
@@ -1427,6 +1440,13 @@ function vesselMatch(a,b){
     .replace(/(\d)\s*[A-Z]\b/g,'$1')   // 623N → 623
     .replace(/[^A-Z0-9]/g,'');
   const x=n(a),y=n(b); return !!x&&!!y&&(x.includes(y)||y.includes(x));
+}
+/* เทียบวันที่: ดึงตัวเลข วัน/เดือน/ปี(2 หลักท้าย) เทียบ — รองรับ 5/8/2026 กับ 05/08/2026 */
+function dateMatch(a,b){
+  const p=s=>{ const m=String(s||'').match(/\d+/g); return (m&&m.length>=2)?m.slice(0,3).map(Number):null; };
+  const A=p(a),B=p(b); if(!A||!B) return false;
+  const yy=n=>String(n==null?'':n).slice(-2);
+  return A[0]===B[0] && A[1]===B[1] && (A[2]==null||B[2]==null||yy(A[2])===yy(B[2]));
 }
 
 /* APPROVE / REJECT เอกสาร DRAFT (เฉพาะ OAK/PLA) */
