@@ -1410,17 +1410,18 @@ async function checkDocAI(type){
     const c=d.containers||{}, cons=d.consignee||{}, ves=d.vessel||{};
     const chip=(txt,ok)=>`<span style="font-size:11px;font-weight:700;border-radius:8px;padding:2px 8px;${ok?'color:#166534;background:#dcfce7;border:1px solid #86efac;':'color:#b45309;background:#fef3c7;border:1px solid #fcd34d;'}">${txt}</span>`;
     let html=`<div style="font-size:12px;font-weight:800;color:#4338ca;margin-bottom:6px;">🤖 ผลตรวจ ${woH(docTypeLabel(type))} · อินวอยซ์ ${woH(inv)}</div>`;
+    let _pass = d.readable!==false;   /* ผ่านครบทุกด่านไหม (ไว้บันทึก PROVED BY AI) */
     if(!d.readable) html+=`<div style="margin-bottom:6px;">${chip('⚠️ อ่านเอกสารไม่ออก (สแกน/เบลอ) — ตรวจเอง',false)}</div>`;
     /* ชนิดเอกสาร — จับอัพผิดช่อง */
     const dt=d.detected_type||'OTHER';
     const dtLabel=k=>k==='OTHER'?'อื่นๆ/ไม่ชัด':docTypeLabel(k);
-    const typeOk = dt===type;
+    const typeOk = dt===type; _pass = _pass && typeOk;
     html+=`<div style="margin-bottom:5px;">${chip((typeOk?'✅':'⛔')+' ชนิดเอกสาร '+(typeOk?'ตรงช่อง':'ผิดช่อง!'), typeOk)}`;
     if(!typeOk) html+=`<span style="font-size:11px;color:#b91c1c;font-weight:700;"> · เอกสารดูเหมือน <b>${woH(dtLabel(dt))}</b> แต่อยู่ในช่อง ${woH(docTypeLabel(type))}</span>`;
     html+=`</div>`;
     /* เบอร์ตู้ — เฉพาะเอกสารที่มีเบอร์ตู้จริง (PACKING/B-L/PHYTO/IPPC/ใบฉีดยุง) */
     if(CTR_DOCS.includes(type)){
-      const ctrOk = (c.missing||[]).length===0;
+      const ctrOk = (c.missing||[]).length===0 && (c.extra||[]).length===0; _pass = _pass && ctrOk;
       html+=`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:5px;">${chip((ctrOk?'✅':'⚠️')+' เบอร์ตู้ '+(c.found||0)+'/'+(c.total_wo||0), ctrOk)}`;
       if((c.missing||[]).length) html+=`<span style="font-size:11px;color:#b91c1c;">ขาด: <b>${c.missing.map(woH).join(', ')}</b></span>`;
       if((c.extra||[]).length) html+=`<span style="font-size:11px;color:#c2410c;">เกิน/ไม่ตรงใบคำสั่ง: <b>${c.extra.map(woH).join(', ')}</b></span>`;
@@ -1429,23 +1430,24 @@ async function checkDocAI(type){
       html+=`<div style="margin-bottom:5px;"><span style="font-size:10.5px;color:#94a3b8;">— เอกสารนี้ไม่ตรวจเบอร์ตู้ —</span></div>`;
     }
     /* consignee */
+    _pass = _pass && !!cons.match;
     html+=`<div style="margin-bottom:4px;">${chip((cons.match?'✅':'⚠️')+' CONSIGNEE '+(cons.match?'ตรง':'ตรวจสอบ'), !!cons.match)}`;
     if(!cons.match) html+=`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH((cons.doc||'').slice(0,40))} · ใบคำสั่ง: ${woH((cons.wo||'').slice(0,40))}</span>`;
     html+=`</div>`;
-    /* vessel — เทียบแบบตัด voyage (V.623N ↔ 623) */
-    if(ves.wo||ves.doc){
-      const vOk = vesselMatch(ves.doc,ves.wo);
+    /* vessel — เทียบแบบตัด voyage (V.623N ↔ 623) · ข้าม IPPC/ใบฉีดยุง (ไม่มีชื่อเรือ) */
+    if((ves.wo||ves.doc) && !NO_VESSEL_DOCS.includes(type)){
+      const vOk = vesselMatch(ves.doc,ves.wo); _pass = _pass && vOk;
       html+=`<div style="margin-bottom:4px;">${chip((vOk?'✅':'⚠️')+' ชื่อเรือ '+(vOk?'ตรง':'ตรวจสอบ'), vOk)}${vOk?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(ves.doc||'-')} · ใบคำสั่ง: ${woH(ves.wo||'-')}</span>`}</div>`;
     }
     /* วันที่อินวอยซ์ / วันที่เรือ — แสดงเมื่อเอกสารมีวันที่นั้น */
     const iv=d.invoice_date||{}, vd=d.vessel_date||{};
-    if(iv.doc){ const m=dateMatch(iv.doc,iv.wo);
+    if(iv.doc){ const m=dateMatch(iv.doc,iv.wo); _pass = _pass && m;
       html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' วันที่อินวอยซ์ '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(iv.doc||'-')} · ใบคำสั่ง: ${woH(iv.wo||'-')}</span>`}</div>`; }
-    if(vd.doc){ const m=dateMatch(vd.doc,vd.wo);
+    if(vd.doc && !NO_VESSEL_DOCS.includes(type)){ const m=dateMatch(vd.doc,vd.wo); _pass = _pass && m;
       html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' วันที่เรือ '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(vd.doc||'-')} · ใบคำสั่ง: ${woH(vd.wo||'-')}</span>`}</div>`; }
     /* น้ำหนัก NW/GW — PHYTO ตรวจ NW+GW · C/O ตรวจ GW (= PHYTO GW) */
     const wt=d.weight||{}, wtFields=(WT_DOCS[type]||[]);
-    const wtRow=(lb,docV,woV)=>{ const m=numMatch(docV,woV);
+    const wtRow=(lb,docV,woV)=>{ const m=numMatch(docV,woV); _pass = _pass && m;
       return `<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' '+lb+' '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(docV||'-')} · ใบคำสั่ง: ${woH(woV||'-')}</span>`}</div>`; };
     if(wtFields.includes('nw')) html+=wtRow('PHYTO NW', wt.nw_doc, wt.nw_wo);
     if(wtFields.includes('gw')) html+=wtRow('PHYTO GW', wt.gw_doc, wt.gw_wo);
@@ -1455,12 +1457,18 @@ async function checkDocAI(type){
     let _bundleBad=[];
     if(bdDoc.length && bd.wo){
       _bundleBad=[...new Set(bdDoc.filter(x=>!numMatch(x,bd.wo)))];
-      const ok=_bundleBad.length===0;
+      const ok=_bundleBad.length===0; _pass = _pass && ok;
       html+=`<div style="margin-bottom:4px;">${chip((ok?'✅':'⚠️')+' จำนวน BUNDLE '+(ok?'ตรง ('+woH(bd.wo)+')':'ผิด!'), ok)}`;
       if(!ok) html+=`<span style="font-size:11px;color:#b91c1c;"> เจอเลขไม่ตรง <b>${_bundleBad.map(woH).join(', ')}</b> · ควรเป็น ${woH(bd.wo)}</span>`;
       html+=`</div>`;
     }
+    /* สรุปผ่าน/ไม่ผ่าน (ขั้นที่ 1 — PROVED BY AI) */
+    html+=`<div style="margin-top:8px;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:800;${_pass?'background:#dcfce7;color:#166534;border:1px solid #86efac;':'background:#fef3c7;color:#b45309;border:1px solid #fcd34d;'}">${_pass?'✅ PROVED BY AI — ผ่านครบทุกด่าน (ขั้นที่ 1) · รอคนตรวจอนุมัติ (ขั้นที่ 2)':'⚠️ ยังไม่ผ่าน AI — มีจุดต้องตรวจสอบด้านบน'}</div>`;
     html+=`<div style="font-size:9.5px;color:#94a3b8;margin-top:6px;">🤖 AI ช่วยตรวจเบื้องต้น — กรุณาตรวจซ้ำก่อน APPROVE โดยเฉพาะเลข/เบอร์ตู้</div>`;
+    /* บันทึกสถานะ AI ต่อไฟล์เวอร์ชันนี้ (ผูกกับชื่อไฟล์ — อัพใหม่ = ต้องตรวจ AI ใหม่) */
+    sb.from('doc_ai_checks').upsert({ invoice_no:inv, doc_type:type, file_name:lf.name,
+      passed:_pass, checked_by:LOGGED_USER||'?', checked_at:new Date().toISOString()
+    }, { onConflict:'invoice_no,doc_type' }).then(()=>loadDocList(), ()=>{});
     /* เก็บข้อมูลไว้ทำ PREVIEW ไฮไลท์ (เขียว=ตู้ตรง / แดง=ตู้เกิน-ผิด) */
     const _na=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
     const _extraSet=new Set((c.extra||[]).map(_na));
@@ -1477,6 +1485,8 @@ async function checkDocAI(type){
 }
 /* เอกสารที่มีเบอร์ตู้จริง (คุณ RCN ระบุ) — ที่เหลือ (INVOICE, C/O) ตรวจแค่ CONSIGNEE/ชื่อเรือ */
 const CTR_DOCS = ['PACKING_LIST','BL','CO','PHYTO','IPPC','MOSQUITO'];
+/* เอกสารที่ไม่มีชื่อเรือ → ไม่ต้องตรวจชื่อเรือ */
+const NO_VESSEL_DOCS = ['IPPC','MOSQUITO'];
 /* ตรวจน้ำหนัก NW/GW: PHYTO ตรวจทั้งคู่ · C/O ตรวจ GW (= PHYTO GW ที่โชว์ใน C/O) */
 const WT_DOCS = { PHYTO:['nw','gw'], CO:['gw'] };
 /* เทียบตัวเลข (น้ำหนัก) — ตัดคอมม่า/ช่องว่าง แล้วเทียบค่า (คลาด ≤1 = ตรง) */
@@ -1635,10 +1645,11 @@ async function loadDocList(){
       );
     });
   }));
-  const [jobRes, logRes, revRes] = await Promise.all([
+  const [jobRes, logRes, revRes, aiRes] = await Promise.all([
     Promise.all(jobs),
     sb.from('doc_upload_log').select('doc_type,file_name,uploaded_by').eq('invoice_no',inv).eq('action','upload').order('id',{ascending:false}).limit(500).then(r=>r.data||[], ()=>[]),
-    sb.from('doc_reviews').select('*').eq('invoice_no',inv).then(r=>r.data||[], ()=>[])
+    sb.from('doc_reviews').select('*').eq('invoice_no',inv).then(r=>r.data||[], ()=>[]),
+    sb.from('doc_ai_checks').select('*').eq('invoice_no',inv).then(r=>r.data||[], ()=>[])
   ]);
   const uploaderMap = {};
   logRes.forEach(l=>{ const k=l.doc_type+'|'+l.file_name; if(!(k in uploaderMap)) uploaderMap[k]=l.uploaded_by; });
@@ -1656,6 +1667,14 @@ async function loadDocList(){
     const rv = revMap[type];
     if(rv && rv.file_name===lf.name) return {state:rv.status, reason:rv.reason, by:rv.reviewed_by};
     return {state:'pending'};
+  };
+  /* สถานะ AI ต่อประเภท (ผูกไฟล์ล่าสุด) — 'pass'/'fail'/null(ยังไม่ตรวจ) */
+  const aiMap = {}; aiRes.forEach(r=>aiMap[r.doc_type]=r);
+  const aiCheck = type => {
+    const lf = latestST['DRAFT|'+type]; if(!lf) return null;
+    const a = aiMap[type];
+    if(a && a.file_name===lf.name) return a.passed?'pass':'fail';
+    return null;
   };
   window._docDraftReview = draftReview;
   window._docReviewInv = inv;
@@ -1694,10 +1713,14 @@ async function loadDocList(){
         revBtns=`<button type="button" onclick="reviewDoc('${t.key}','approved')" title="${_apOn?'กดซ้ำ = ยกเลิกอนุมัติ':'อนุมัติ'}" style="border:none;background:${_apOn?'#16a34a':'#e2e8f0'};color:${_apOn?'#fff':'#16a34a'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;margin-right:3px;">✓</button><button type="button" onclick="reviewDoc('${t.key}','rejected')" title="${_rjOn?'กดซ้ำ = ยกเลิกตีกลับ':'ตีกลับ'}" style="border:none;background:${_rjOn?'#dc2626':'#e2e8f0'};color:${_rjOn?'#fff':'#dc2626'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;cursor:pointer;">✗</button>`;
       }
     }
+    let aiBadge='';
+    const _aiSt=aiCheck(t.key);
+    if(_aiSt==='pass') aiBadge=`<div style="margin-top:2px;"><span title="AI ตรวจผ่านครบ (เวอร์ชันนี้)" style="font-size:8px;font-weight:800;color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:1px 4px;">✓PROVED</span></div>`;
+    else if(_aiSt==='fail') aiBadge=`<div style="margin-top:2px;"><span title="AI ตรวจแล้วมีจุดไม่ผ่าน" style="font-size:8px;font-weight:800;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:1px 4px;">✗ไม่ผ่าน</span></div>`;
     return _cell(`<span style="font-size:11.5px;font-weight:700;color:#374151;">${t.label}</span>`)
          + _cell(mk('DRAFT'),'center')
          + _cell(revChip)
-         + (_edit?_cell(aiBtn,'center'):'')
+         + (_edit?_cell(aiBtn+aiBadge,'center'):'')
          + (_edit?_cell(revBtns,'center'):'')
          + _cell(mk('FINAL'),'center');
   }).join('');
