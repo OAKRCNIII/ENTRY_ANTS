@@ -275,6 +275,20 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
   </div>
 </div>
 
+<!-- ═══════════ AI PREVIEW (PDF + ไฮไลท์) ═══════════ -->
+<div id="aiPvBg" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:2000;padding:16px;overflow:auto;">
+  <div style="max-width:1180px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:#4338ca;color:#fff;">
+      <div style="font-weight:800;font-size:14px;">🤖 PREVIEW BY AI — <span id="aiPvTitle"></span></div>
+      <button onclick="closeAiPreview()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:5px 13px;cursor:pointer;font-weight:800;font-size:13px;">✕ ปิด</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;">
+      <div id="aiPvPanel" style="width:290px;flex-shrink:0;padding:12px 14px;border-right:1px solid #eef2f6;max-height:82vh;overflow:auto;background:#f8fafc;"></div>
+      <div id="aiPvPages" style="flex:1;min-width:320px;padding:12px;max-height:82vh;overflow:auto;background:#e2e8f0;text-align:center;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ LOGIN ═══════════ -->
 <div id="loginScreen">
   <div class="login-card">
@@ -1432,6 +1446,14 @@ async function checkDocAI(type){
     if(wtFields.includes('nw')) html+=wtRow('PHYTO NW', wt.nw_doc, wt.nw_wo);
     if(wtFields.includes('gw')) html+=wtRow('PHYTO GW', wt.gw_doc, wt.gw_wo);
     html+=`<div style="font-size:9.5px;color:#94a3b8;margin-top:6px;">🤖 AI ช่วยตรวจเบื้องต้น — กรุณาตรวจซ้ำก่อน APPROVE โดยเฉพาะเลข/เบอร์ตู้</div>`;
+    /* เก็บข้อมูลไว้ทำ PREVIEW ไฮไลท์ (เขียว=ตู้ตรง / แดง=ตู้เกิน-ผิด) */
+    const _na=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    const _extraSet=new Set((c.extra||[]).map(_na));
+    const _docList=c.doc||[];
+    window._aiPreviewData={ inv, type, folder:lf.folder, name:lf.name, panelHtml:html,
+      targets:{ red:(c.extra||[]).map(_na).filter(Boolean),
+                green:_docList.map(_na).filter(x=>x&&!_extraSet.has(x)) } };
+    html+=`<div style="margin-top:8px;"><button type="button" onclick="openAiPreview()" style="background:#4338ca;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:800;cursor:pointer;">🖼️ PREVIEW BY AI — ดูเอกสาร + ไฮไลท์</button></div>`;
     box.innerHTML=html;
   }catch(e){
     box.innerHTML=`<div style="font-size:12px;color:#b91c1c;font-weight:700;">❌ เชื่อมต่อไม่สำเร็จ: ${woH(String(e))}</div>`;
@@ -1446,6 +1468,65 @@ function numMatch(a,b){
   const f=s=>{ const v=parseFloat(String(s||'').replace(/[, ]/g,'')); return isNaN(v)?null:v; };
   const x=f(a),y=f(b); if(x==null||y==null) return false;
   return Math.abs(x-y)<=1;
+}
+/* โหลด pdf.js (ครั้งเดียว) สำหรับ PREVIEW ไฮไลท์ */
+let _pdfjsReady=null;
+function _loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve();
+  if(_pdfjsReady) return _pdfjsReady;
+  _pdfjsReady=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+    s.onload=()=>{ try{ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; }catch(e){} res(); };
+    s.onerror=()=>rej(new Error('โหลด pdf.js ไม่ได้'));
+    document.head.appendChild(s);
+  });
+  return _pdfjsReady;
+}
+function closeAiPreview(){ document.getElementById('aiPvBg').style.display='none'; document.getElementById('aiPvPages').innerHTML=''; }
+/* เปิด PDF จริง + ไฮไลท์เบอร์ตู้ (เขียว=ตรง / แดง=เกิน-ผิด) — หาตำแหน่งจากชั้นข้อความ PDF */
+async function openAiPreview(){
+  const d=window._aiPreviewData; if(!d) return;
+  document.getElementById('aiPvTitle').textContent=docTypeLabel(d.type)+' · '+d.inv;
+  document.getElementById('aiPvPanel').innerHTML=d.panelHtml||'';
+  const pagesEl=document.getElementById('aiPvPages');
+  pagesEl.innerHTML='<div style="padding:24px;color:#475569;font-size:13px;">⏳ กำลังเปิดเอกสาร...</div>';
+  document.getElementById('aiPvBg').style.display='block';
+  try{
+    const { data:sd } = await sb.storage.from('invoice_docs').createSignedUrl(d.folder+'/'+d.name, 600);
+    if(!sd){ pagesEl.innerHTML='<div style="padding:24px;color:#b91c1c;">เปิดไฟล์ไม่ได้</div>'; return; }
+    if(!/\.pdf$/i.test(d.name)){
+      pagesEl.innerHTML=`<img src="${sd.signedUrl}" style="max-width:100%;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.2);"><div style="font-size:11px;color:#64748b;margin-top:8px;">ไฟล์รูป — ไฮไลท์อัตโนมัติไม่ได้ ดูจุดผิดที่แผงซ้าย</div>`;
+      return;
+    }
+    await _loadPdfJs();
+    const buf=await (await fetch(sd.signedUrl)).arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    pagesEl.innerHTML='';
+    const T=d.targets||{red:[],green:[]};
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const scale=1.4, vp=page.getViewport({scale});
+      const wrap=document.createElement('div');
+      wrap.style.cssText='position:relative;display:inline-block;margin:0 0 12px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);';
+      const cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height; cv.style.display='block';
+      wrap.appendChild(cv); pagesEl.appendChild(wrap);
+      await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise;
+      const tc=await page.getTextContent();
+      tc.items.forEach(it=>{
+        const s=String(it.str||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(s.length<4) return;
+        let col=null;
+        if(T.red.some(t=>t&&s.includes(t))) col='rgba(239,68,68,.38)';
+        else if(T.green.some(t=>t&&s.includes(t))) col='rgba(34,197,94,.32)';
+        if(!col) return;
+        const tx=pdfjsLib.Util.transform(vp.transform, it.transform);
+        const fh=Math.hypot(tx[2],tx[3]); const w=(it.width||0)*scale;
+        const hl=document.createElement('div');
+        hl.style.cssText=`position:absolute;left:${tx[4]-1}px;top:${tx[5]-fh-1}px;width:${w+2}px;height:${fh+2}px;background:${col};border-radius:2px;pointer-events:none;`;
+        wrap.appendChild(hl);
+      });
+    }
+  }catch(e){ pagesEl.innerHTML='<div style="padding:24px;color:#b91c1c;">โหลด PDF ไม่สำเร็จ: '+woH(String(e))+'</div>'; }
 }
 /* เทียบชื่อเรือ: ตัด "V." หน้าเลข voyage และตัวอักษรท้าย (V.623N → 623) */
 function vesselMatch(a,b){
