@@ -1432,7 +1432,7 @@ async function checkDocAI(type){
   }
 }
 /* เอกสารที่มีเบอร์ตู้จริง (คุณ RCN ระบุ) — ที่เหลือ (INVOICE, C/O) ตรวจแค่ CONSIGNEE/ชื่อเรือ */
-const CTR_DOCS = ['PACKING_LIST','BL','PHYTO','IPPC','MOSQUITO'];
+const CTR_DOCS = ['PACKING_LIST','BL','CO','PHYTO','IPPC','MOSQUITO'];
 /* เทียบชื่อเรือ: ตัด "V." หน้าเลข voyage และตัวอักษรท้าย (V.623N → 623) */
 function vesselMatch(a,b){
   const n=s=>String(s||'').toUpperCase()
