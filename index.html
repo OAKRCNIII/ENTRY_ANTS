@@ -1516,9 +1516,10 @@ function _showAiResult(type, inv, lf, d, save){
     /* จำนวน BUNDLE — เลขทุกจุดในเอกสารต้องตรงใบคำสั่ง (เจอตัวไม่ตรง = ผิด) */
     const bd=d.bundles||{};
     const bdDoc=Array.isArray(bd.doc)?bd.doc:(bd.doc?[bd.doc]:[]);
-    let _bundleBad=[];
+    let _bundleBad=[], _bundleGood=[];
     if(bdDoc.length && bd.wo){
       _bundleBad=[...new Set(bdDoc.filter(x=>!numMatch(x,bd.wo)))];
+      _bundleGood=[...new Set(bdDoc.filter(x=>numMatch(x,bd.wo)))];
       const ok=_bundleBad.length===0; _pass = _pass && ok;
       html+=`<div style="margin-bottom:4px;">${chip((ok?'✅':'⚠️')+' จำนวน BUNDLE '+(ok?'ตรง ('+woH(bd.wo)+')':'ผิด!'), ok)}`;
       if(!ok) html+=`<span style="font-size:11px;color:#b91c1c;"> เจอเลขไม่ตรง <b>${_bundleBad.map(woH).join(', ')}</b> · ควรเป็น ${woH(bd.wo)}</span>`;
@@ -1548,7 +1549,8 @@ function _showAiResult(type, inv, lf, d, save){
     const _docList=c.doc||[];
     window._aiPreviewData={ inv, type, folder:lf.folder, name:lf.name, panelHtml:html,
       targets:{ red:[...(c.extra||[]).map(_na), ..._blRed].filter(Boolean),
-                redNum:_bundleBad.map(_na).filter(Boolean),   /* เลข bundle ที่ผิด (จับแบบตัวเลขเดี่ยว) */
+                redNum:_bundleBad.map(_na).filter(Boolean),     /* เลข bundle ที่ผิด (จับแบบตัวเลขเดี่ยว) */
+                greenNum:_bundleGood.map(_na).filter(Boolean),  /* เลข bundle ที่ถูก (ทุกจุด) */
                 green:[..._docList.map(_na).filter(x=>x&&!_extraSet.has(x)), ..._blGreen].filter(Boolean) } };
     html+=`<div style="margin-top:8px;"><button type="button" onclick="openAiPreview()" style="background:#4338ca;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:800;cursor:pointer;">🖼️ PREVIEW BY AI — ดูเอกสาร + ไฮไลท์</button></div>`;
     box.innerHTML=html;
@@ -1649,6 +1651,7 @@ async function openAiPreview(){
           if(!isD(b)&&!isD(a)){ for(let k=at;k<at+str.length;k++) markItem[charItem[k]]=color; }
           from=at+str.length; } };
       (T.green||[]).forEach(t=>mark(t,'g'));
+      (T.greenNum||[]).forEach(t=>markNum(t,'g'));   /* เลข bundle ที่ถูก (ทุกจุด) */
       (T.red||[]).forEach(t=>mark(t,'r'));   /* แดงทับเขียวถ้าซ้อน */
       (T.redNum||[]).forEach(t=>markNum(t,'r'));
       tc.items.forEach((it,idx)=>{
