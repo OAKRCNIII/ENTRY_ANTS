@@ -1526,8 +1526,9 @@ function _showAiResult(type, inv, lf, d, save){
     /* น้ำหนัก NW/GW — PHYTO ตรวจ NW+GW · C/O ตรวจ GW (= PHYTO GW) */
     const wt=d.weight||{}, wtFields=(WT_DOCS[type]||[]);
     const wtRow=(lb,docV,woV)=>{ const m=numMatch(docV,woV); _pass = _pass && m;
-      { const g=(m?_numGood:_numBad), _wn=String(docV||'').replace(/[^0-9]/g,'');
-        if(_wn.length>=3){ g.push(_wn); g.push(_wn+'00'); if(/00$/.test(_wn)) g.push(_wn.slice(0,-2)); } }  /* ครอบกรณี .00 (480,000.00→48000000) */
+      { const gN=(m?_numGood:_numBad), gT=(m?_blGreen:_blRed), _wn=String(docV||'').replace(/[^0-9]/g,'');
+        if(_wn.length>=3){ gN.push(_wn); gN.push(_wn+'00'); if(/00$/.test(_wn)) gN.push(_wn.slice(0,-2));
+          if(_wn.length>=5){ gT.push(_wn); gT.push(_wn+'00'); } } }  /* ครอบ .00 (480,000.00→48000000) + substring กันเลขติดกัน */
       return `<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' '+lb+' '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(docV||'-')} · ใบคำสั่ง: ${woH(woV||'-')}</span>`}</div>`; };
     if(wtFields.includes('nw')) html+=wtRow('PHYTO NW', wt.nw_doc, wt.nw_wo);
     if(wtFields.includes('gw')) html+=wtRow('PHYTO GW', wt.gw_doc, wt.gw_wo);
