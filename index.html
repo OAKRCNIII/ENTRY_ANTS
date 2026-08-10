@@ -1445,6 +1445,14 @@ function _showAiResult(type, inv, lf, d, save){
     let _blGreen=[], _blRed=[];       /* ไฮไลท์ข้อความ (consignee/ชื่อเรือ/booking/เลข B/L) */
     let _numGood=[], _numBad=[];      /* ไฮไลท์ตัวเลข (น้ำหนัก/M3) แบบ boundary */
     const _hn=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    const _MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const _MONF=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+    const _dateCands=(v)=>{ const n=String(v||'').match(/\d+/g)||[], out={num:[],txt:[]};   /* ครอบวันที่ทั้งแบบเลข 12082026 และมีชื่อเดือน 12AUG2026 */
+      if(n.length>=3){ const d=+n[0], m=+n[1], y=+n[2];
+        const dd=String(d).padStart(2,'0'), mm=String(m).padStart(2,'0'), yy=String(y).length<=2?('20'+String(y).padStart(2,'0')):String(y);
+        out.num.push(dd+mm+yy, ''+d+m+yy, dd+mm+yy.slice(-2));
+        if(m>=1&&m<=12)[_MON[m-1],_MONF[m-1]].forEach(mo=>{ out.txt.push(dd+mo+yy, ''+d+mo+yy, mo+dd+yy, mo+d+yy); }); }
+      return out; };
     if(!d.readable) html+=`<div style="margin-bottom:6px;">${chip('⚠️ อ่านเอกสารไม่ออก (สแกน/เบลอ) — ตรวจเอง',false)}</div>`;
     /* ชนิดเอกสาร — จับอัพผิดช่อง */
     const dt=d.detected_type||'OTHER';
@@ -1478,10 +1486,12 @@ function _showAiResult(type, inv, lf, d, save){
     /* วันที่อินวอยซ์ / วันที่เรือ — แสดงเมื่อเอกสารมีวันที่นั้น */
     const iv=d.invoice_date||{}, vd=d.vessel_date||{};
     if(iv.doc){ const m=dateMatch(iv.doc,iv.wo); _pass = _pass && m;
-      { const _dn=String(iv.doc||'').replace(/[^0-9]/g,''); if(_dn.length>=6)(m?_numGood:_numBad).push(_dn); }
+      { const raw=_hn(iv.doc); if(raw.length>=6)(m?_blGreen:_blRed).push(raw);
+        const dc=_dateCands(iv.doc); (m?_numGood:_numBad).push(...dc.num); (m?_blGreen:_blRed).push(...dc.txt); }
       html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' วันที่อินวอยซ์ '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(iv.doc||'-')} · ใบคำสั่ง: ${woH(iv.wo||'-')}</span>`}</div>`; }
     if(vd.doc && !NO_VDATE_DOCS.includes(type)){ const m=dateMatch(vd.doc,vd.wo); _pass = _pass && m;
-      { const _dn=String(vd.doc||'').replace(/[^0-9]/g,''); if(_dn.length>=6)(m?_numGood:_numBad).push(_dn); }
+      { const raw=_hn(vd.doc); if(raw.length>=6)(m?_blGreen:_blRed).push(raw);
+        const dc=_dateCands(vd.doc); (m?_numGood:_numBad).push(...dc.num); (m?_blGreen:_blRed).push(...dc.txt); }
       html+=`<div style="margin-bottom:4px;">${chip((m?'✅':'⚠️')+' วันที่เรือ '+(m?'ตรง':'ตรวจสอบ'), m)}${m?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(vd.doc||'-')} · ใบคำสั่ง: ${woH(vd.wo||'-')}</span>`}</div>`; }
     /* B/L: เลขบุคกิ้ง (ตรงใบคำสั่ง) + เลข B/L = OOLU+บุคกิ้ง ทุกหน้าตรงกัน */
     if(type==='BL'){
