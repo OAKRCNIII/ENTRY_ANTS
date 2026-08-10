@@ -760,7 +760,7 @@ const AI_RUN_USERS = ['OAK_THIRA'];
 const canRunAI = () => AI_RUN_USERS.includes(LOGGED_USER);
 /* role ที่อัพได้เฉพาะ DRAFT (ซ่อน FINAL + ปุ่มลบ + Dashboard) */
 const isDraftOnly = () => (USER_ROLE==='doc_draft' || USER_ROLE==='doc_wo');
-const sb = supabase.createClient(SB_URL, SB_KEY);
+const sb = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false, autoRefreshToken:true}});  /* ไม่จำ login — ปิด/รีเฟรชแล้วต้องล็อกอินใหม่ */
 let USER_ROLE = '', LOGGED_USER = '';
 
 // ═══════════════════════════════════════════════════════════
