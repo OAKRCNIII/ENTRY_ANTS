@@ -728,7 +728,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
 // ═══════════════════════════════════════════════════════════
 const EDGE_CHECK_FN = 'hyper-api';   /* slug จริงของ Edge Function (ชื่อโชว์ = check-doc แต่ URL คือ hyper-api) */
 const SB_URL = 'https://ywslgrusflfuxtrtvlfu.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c2xncnVzZmxmdXh0cnR2bGZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Njk5NjY2NCwiZXhwIjoyMDkyNTcyNjY0fQ.V3scJCzBmmF_Fgr3qrgCCWJDY2OLlIeKwcWtMPcVGvc';
+const SB_KEY = 'sb_publishable_nrjNNyA08-GCRphIQuzvvg_YpGxiYeY';  /* anon/publishable — เปิดเผยได้ปลอดภัย, ข้อมูลจริงกันด้วย RLS + Supabase Auth */
 const _CREDS = [
   {user:'OAK_THIRA',  hash:'7d37d06492e394475abdff1317de1cb6b97c16d5584400fa07875594165206de', role:'admin'},
   {user:'YAI_THIRA',  hash:'3c4e528de01db4470664703da16285ddca9df0c04c1239622c1df2735c60199f', role:'transport'},
@@ -794,28 +794,32 @@ function applyRoleTabs(role){
 }
 
 async function doLogin(){
-  const user = document.getElementById('loginUser').value.trim().toUpperCase();
+  const raw  = document.getElementById('loginUser').value.trim();
   const pass = document.getElementById('loginPass').value;
   const err  = document.getElementById('loginErr');
   err.textContent = '';
-  if(!user || !pass){ err.textContent='กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'; return; }
-  const h = await _hash(user + ':' + pass);
-  const cred = _CREDS.find(c => c.user === user && c.hash === h);
-  if(!cred){ err.textContent='ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'; return; }
-  if(_MAINT_ON && cred.user!=='OAK_THIRA'){ _logLogin(cred.user); _showMaintScreen(); return; }
-  USER_ROLE = cred.role; LOGGED_USER = cred.user;
-  sessionStorage.setItem('entry_role', cred.role);
-  sessionStorage.setItem('entry_user', cred.user);
+  if(!raw || !pass){ err.textContent='กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'; return; }
+  const email = (raw.includes('@') ? raw : raw.toLowerCase()+'@ants.local');
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if(error || !data || !data.user){ err.textContent='ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'; return; }
+  _applySession(data.user);
+}
+/* ตั้งค่า user/role จาก session แล้วเข้าแอป (ใช้ร่วมทั้ง login สดและ auto-login) */
+function _applySession(u){
+  const md = u.user_metadata || {};
+  const uname = md.username || (u.email||'').split('@')[0].toUpperCase();
+  const role  = md.role_entry || md.role_dashboard || 'admin';   /* ไม่มี role → เห็นทุกแท็บ (ไม่บล็อกใคร) */
+  USER_ROLE = role; LOGGED_USER = uname;
+  if(_MAINT_ON && LOGGED_USER!=='OAK_THIRA'){ _logLogin(uname); _showMaintScreen(); return; }
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').style.display='block';
-  document.getElementById('userChip').textContent = '👤 ' + cred.user;
-  _updateMaintBtn(); _logLogin(cred.user);
-  applyRoleTabs(cred.role);
+  document.getElementById('userChip').textContent = '👤 ' + uname;
+  _updateMaintBtn(); _logLogin(uname);
+  applyRoleTabs(role);
   initApp();
 }
-function doLogout(){
-  sessionStorage.removeItem('entry_role');
-  sessionStorage.removeItem('entry_user');
+async function doLogout(){
+  try{ await sb.auth.signOut(); }catch(e){}
   location.reload();
 }
 /* ===== MAINTENANCE — ปิดเว็บชั่วคราว (สลับจาก Supabase, ปุ่มเฉพาะ OAK_THIRA) ===== */
@@ -845,8 +849,8 @@ async function toggleMaint(){
   if(turnOn && !confirm('ปิดเว็บชั่วคราว?\nคนทั่วไปจะเข้าใช้งานไม่ได้ (admin ยังเข้าได้)'))return;
   if(!turnOn && !confirm('เปิดเว็บให้ใช้งานปกติ?'))return;
   try{
-    const r=await fetch(SB_URL+'/rest/v1/app_config?id=eq.1',{method:'PATCH',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({maintenance:turnOn,updated_at:new Date().toISOString()})});
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    const {error}=await sb.from('app_config').update({maintenance:turnOn,updated_at:new Date().toISOString()}).eq('id',1);
+    if(error)throw error;
     _MAINT_ON=turnOn; _updateMaintBtn();
     alert(turnOn?'🔴 ปิดเว็บแล้ว — คนทั่วไปเข้าไม่ได้':'🟢 เปิดเว็บแล้ว — ใช้งานได้ปกติ');
   }catch(e){ alert('สลับสถานะไม่สำเร็จ: '+(e.message||e)); }
@@ -865,22 +869,15 @@ function _deviceStr(){
 }
 async function _logLogin(user){
   let ip=''; try{ const c=new AbortController(); setTimeout(()=>c.abort(),3000); const rr=await fetch('https://api.ipify.org?format=json',{signal:c.signal}); ip=(await rr.json()).ip||''; }catch(e){}
-  try{ await fetch(SB_URL+'/rest/v1/login_log',{method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({user_name:user,ip:ip,device:_deviceStr(),app:'ENTRY',ua:navigator.userAgent})}); }catch(e){}
+  try{ await sb.from('login_log').insert({user_name:user,ip:ip,device:_deviceStr(),app:'ENTRY',ua:navigator.userAgent}); }catch(e){}
 }
-// Auto-login from session (async — เช็คสถานะปิดเว็บก่อน)
+// Auto-login จาก Supabase Auth session (async — เช็คสถานะปิดเว็บก่อน)
 (async function(){
   await _loadMaintenance();
-  const r = sessionStorage.getItem('entry_role');
-  const u = sessionStorage.getItem('entry_user');
-  if(r && u){
-    USER_ROLE = r; LOGGED_USER = u;
-    if(_MAINT_ON && LOGGED_USER!=='OAK_THIRA'){ _showMaintScreen(); return; }
-    document.getElementById('loginScreen').style.display='none';
-    document.getElementById('app').style.display='block';
-    document.getElementById('userChip').textContent='👤 '+u;
-    _updateMaintBtn();
-    applyRoleTabs(r);
-    initApp();
+  let session=null;
+  try{ session=(await sb.auth.getSession()).data.session; }catch(e){}
+  if(session && session.user){
+    _applySession(session.user);
   } else {
     const mb=document.getElementById('loginMaint');
     if(mb){ if(_MAINT_ON){mb.style.display='block';mb.textContent='🔧 '+_MAINT_MSG;} else mb.style.display='none'; }
