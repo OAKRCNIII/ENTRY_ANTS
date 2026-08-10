@@ -1486,7 +1486,13 @@ function _showAiResult(type, inv, lf, d, save){
         const allMatch=vns.every(v=>vesselMatch(v, ves.wo));
         const vConsist=vns.every(v=>vesselMatch(v, vns[0]));
         const vOk=allMatch && vConsist; _pass = _pass && vOk;
-        (vOk?_blGreen:_blRed).push(...vns.map(na).filter(x=>x.length>=4));
+        /* ไฮไลท์: ชื่อเรือรวม + ชื่อเรือ(อย่างเดียว) + voyage แยก (หน้า 2 แยกคนละที่) */
+        const vTgt=[];
+        vns.forEach(v=>{ const nv=na(v); if(nv.length>=4) vTgt.push(nv);
+          const p=String(v).trim().split(/\s+/), last=p[p.length-1]||'';
+          if(p.length>1 && /\d/.test(last)){ const ship=na(p.slice(0,-1).join('')), voy=na(last);
+            if(ship.length>=4) vTgt.push(ship); if(voy.length>=3) vTgt.push(voy); } });
+        (vOk?_blGreen:_blRed).push(...vTgt);
         html+=`<div style="margin-bottom:4px;">${chip((vOk?'✅':'⚠️')+' ชื่อเรือ '+(vOk?'ตรง'+(vns.length>1?' (ทุกหน้า)':''):'ตรวจสอบ'), vOk)}${vOk?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${vns.map(woH).join(' / ')} · ใบคำสั่ง: ${woH(ves.wo||'-')}</span>`}</div>`;
       }
       const bkg=d.booking||{}, bls=(d.bl_numbers||[]);
