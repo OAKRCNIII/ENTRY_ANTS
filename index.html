@@ -809,7 +809,7 @@ async function doLogin(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('userChip').textContent = '👤 ' + cred.user;
-  _updateMaintBtn();
+  _updateMaintBtn(); _logLogin(cred.user);
   applyRoleTabs(cred.role);
   initApp();
 }
@@ -856,6 +856,17 @@ setInterval(async()=>{
   await _loadMaintenance(); _updateMaintBtn();
   if(_MAINT_ON && USER_ROLE!=='admin') _showMaintScreen();
 }, 60000);
+/* ===== LOGIN LOG — บันทึกทุกครั้งที่ล็อกอินสำเร็จ ===== */
+function _deviceStr(){
+  const ua=navigator.userAgent||'';
+  let os='?'; if(/Windows/.test(ua))os='Windows'; else if(/iPhone|iPad|iPod/.test(ua))os='iOS'; else if(/Android/.test(ua))os='Android'; else if(/Macintosh|Mac OS/.test(ua))os='Mac'; else if(/Linux/.test(ua))os='Linux';
+  let br='?'; if(/Edg\//.test(ua))br='Edge'; else if(/OPR\//.test(ua))br='Opera'; else if(/Chrome\//.test(ua))br='Chrome'; else if(/Firefox\//.test(ua))br='Firefox'; else if(/Safari\//.test(ua))br='Safari';
+  return os+' · '+br;
+}
+async function _logLogin(user){
+  let ip=''; try{ const c=new AbortController(); setTimeout(()=>c.abort(),3000); const rr=await fetch('https://api.ipify.org?format=json',{signal:c.signal}); ip=(await rr.json()).ip||''; }catch(e){}
+  try{ await fetch(SB_URL+'/rest/v1/login_log',{method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({user_name:user,ip:ip,device:_deviceStr(),app:'ENTRY',ua:navigator.userAgent})}); }catch(e){}
+}
 // Auto-login from session (async — เช็คสถานะปิดเว็บก่อน)
 (async function(){
   await _loadMaintenance();
