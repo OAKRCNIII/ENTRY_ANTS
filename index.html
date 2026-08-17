@@ -756,7 +756,7 @@ const ROLE_TABS = {
 /* role ที่แก้ใบคำสั่งได้ */
 const canEditWO = () => (USER_ROLE==='admin' || USER_ROLE==='doc_wo');
 /* กด AI CHECK ได้เฉพาะ RCN (คนอื่นเห็นผล + กดดูย้อนหลัง/พรีวิวได้ แต่กดตรวจใหม่ไม่ได้) */
-const AI_RUN_USERS = ['OAK_THIRA'];
+const AI_RUN_USERS = ['OAK_THIRA','PLA_ANTS'];
 const canRunAI = () => AI_RUN_USERS.includes(LOGGED_USER);
 /* role ที่อัพได้เฉพาะ DRAFT (ซ่อน FINAL + ปุ่มลบ + Dashboard) */
 const isDraftOnly = () => (USER_ROLE==='doc_draft' || USER_ROLE==='doc_wo');
@@ -1192,6 +1192,7 @@ function renderWorkOrder(){
       <label style="font-size:11px;font-weight:700;color:#334155;">PHYTO GW<input id="wo_gw" ${RO} oninput="woNumInput(this)" value="${woH(woFmtNum(d.gw))}" style="${inpBase}${manualBg}margin-top:3px;"></label>
       <label style="font-size:11px;font-weight:700;color:#334155;">จำนวน BUNDLE<input id="wo_bundles" ${RO} value="${woH(d.bundles)}" placeholder="เช่น 600" style="${inpBase}${manualBg}margin-top:3px;"></label>
       <div style="grid-column:1/3;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:2px;">
+        <label style="font-size:11px;font-weight:700;color:#334155;display:flex;align-items:center;gap:8px;"><input type="checkbox" id="wo_vessel_show" ${edit?'':'disabled'} ${d.show_vessel?'checked':''} style="width:16px;height:16px;accent-color:#1e40af;">โชว์ชื่อเรือใน PHYTO</label>
         <label style="font-size:11px;font-weight:700;color:#334155;display:flex;align-items:center;gap:8px;"><input type="checkbox" id="wo_m3" ${edit?'':'disabled'} ${d.show_m3?'checked':''} onchange="woM3Toggle()" style="width:16px;height:16px;accent-color:#1e40af;">โชว์ M3 ในเอกสาร</label>
         <span id="wo_m3_wrap" style="display:${d.show_m3?'inline-flex':'none'};align-items:center;gap:6px;">
           <span style="font-size:11px;font-weight:700;color:#334155;">ค่า M3:</span>
@@ -1241,7 +1242,7 @@ function woCollect(){
   if(document.getElementById('wo_consignee')){
     return { invoice_no:g('wo_inv'), invoice_date:g('wo_date'), consignee:g('wo_consignee'),
       booking_no:g('wo_bkg'), vessel_name:g('wo_vessel'), vessel_date:g('wo_vdate'), nw:g('wo_nw'), gw:g('wo_gw'),
-      show_m3:g('wo_m3'), m3_value:g('wo_m3_val'), bundles:g('wo_bundles'), containers:g('wo_ctr') };
+      show_m3:g('wo_m3'), m3_value:g('wo_m3_val'), show_vessel:g('wo_vessel_show'), bundles:g('wo_bundles'), containers:g('wo_ctr') };
   }
   return _woData || {};
 }
@@ -1287,6 +1288,7 @@ function printWorkOrder(){
       ${row('CONSIGNEE', d.consignee)}
       ${row('เลขบุคกิ้ง', d.booking_no)}
       ${row('ชื่อเรือ', d.vessel_name)}
+      ${row('โชว์ชื่อเรือ (PHYTO)', d.show_vessel?'✔ โชว์':'✘ ไม่โชว์')}
       ${row('วันที่เรือ', d.vessel_date)}
       ${row('PHYTO NW', woFmtNum(d.nw))}
       ${row('PHYTO GW', woFmtNum(d.gw))}
@@ -1337,13 +1339,15 @@ async function saveWorkOrder(){
     gw: document.getElementById('wo_gw').value.trim() || null,
     show_m3: document.getElementById('wo_m3').checked,
     m3_value: document.getElementById('wo_m3').checked ? (document.getElementById('wo_m3_val')?.value.trim() || null) : null,
+    show_vessel: !!document.getElementById('wo_vessel_show')?.checked,
     bundles: document.getElementById('wo_bundles')?.value.trim() || null,
     containers: document.getElementById('wo_ctr').value.trim() || null,
     updated_by: LOGGED_USER || '?',
     updated_at: new Date().toISOString(),
   };
   if(msg){ msg.textContent='⏳ กำลังบันทึก...'; msg.style.color='#64748b'; }
-  const { error } = await sb.from('work_orders').upsert(payload, { onConflict:'invoice_no' });
+  let { error } = await sb.from('work_orders').upsert(payload, { onConflict:'invoice_no' });
+  if(error && /show_vessel/.test(error.message||'')){ const {show_vessel, ...p2}=payload; ({ error } = await sb.from('work_orders').upsert(p2, { onConflict:'invoice_no' })); }  /* fallback ถ้ายังไม่ได้รัน add_show_vessel.sql */
   if(error){ if(msg){msg.textContent='❌ '+error.message; msg.style.color='#dc2626';} return; }
   _woData = { ..._woData, ...payload };
   if(msg){ msg.textContent='✅ บันทึกใบคำสั่งแล้ว — ทุกคนเห็นข้อมูลนี้'; msg.style.color='#15803d'; }
@@ -1543,11 +1547,20 @@ function _showAiResult(type, inv, lf, d, save){
     html+=`<div style="margin-bottom:4px;">${chip((cons.match?'✅':'⚠️')+' CONSIGNEE '+(cons.match?'ตรง':'ตรวจสอบ'), !!cons.match)}`;
     if(!cons.match) html+=`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH((cons.doc||'').slice(0,40))} · ใบคำสั่ง: ${woH((cons.wo||'').slice(0,40))}</span>`;
     html+=`</div>`;
-    /* vessel — เช็คเฉพาะเมื่อเอกสารมีชื่อเรือ (PHYTO อาจไม่มี) · ข้าม IPPC/ใบฉีดยุง · B/L เช็คแยก 2 จุด */
-    if(ves.doc && !NO_VESSEL_DOCS.includes(type) && type!=='BL'){
-      const vOk = vesselMatch(ves.doc,ves.wo); _pass = _pass && vOk;
-      { const _v=_hn(ves.doc); if(_v.length>=4)(vOk?_blGreen:_blRed).push(_v); }
-      html+=`<div style="margin-bottom:4px;">${chip((vOk?'✅':'⚠️')+' ชื่อเรือ '+(vOk?'ตรง':'ตรวจสอบ'), vOk)}${vOk?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(ves.doc||'-')} · ใบคำสั่ง: ${woH(ves.wo||'-')}</span>`}</div>`;
+    /* ชื่อเรือ — PHYTO ใช้ช่องติ๊ก "โชว์ชื่อเรือ" · อื่นๆ เช็คเมื่อมีชื่อจริง · ข้าม IPPC/ใบฉีดยุง · B/L แยก 2 จุด */
+    if(!NO_VESSEL_DOCS.includes(type) && type!=='BL'){
+      const _junkV = s=>{ const n=_hn(s); return !n || n.length<4 || ['VESSEL','CARRIER','CONVEYANCE','MEANSOFCONVEYANCE','SHIP','VOYAGE','NAME'].includes(n); };  /* กันป้ายกำกับในฟอร์ม เช่น "VESSEL" */
+      const _hasVes = ves.doc && !_junkV(ves.doc);
+      const _vRow = ()=>{ const vOk=vesselMatch(ves.doc,ves.wo); _pass=_pass&&vOk;
+        { const _v=_hn(ves.doc); if(_v.length>=4)(vOk?_blGreen:_blRed).push(_v); }
+        html+=`<div style="margin-bottom:4px;">${chip((vOk?'✅':'⚠️')+' ชื่อเรือ '+(vOk?'ตรง':'ตรวจสอบ'), vOk)}${vOk?'':`<span style="font-size:10.5px;color:#64748b;"> · เอกสาร: ${woH(ves.doc||'-')} · ใบคำสั่ง: ${woH(ves.wo||'-')}</span>`}</div>`; };
+      if(type==='PHYTO'){
+        if(ves.wo_show){   /* ติ๊กว่าต้องมีชื่อเรือ → ไม่มี=ฟ้อง, มี=เทียบ */
+          if(!_hasVes){ _pass=false; html+=`<div style="margin-bottom:4px;">${chip('⚠️ ชื่อเรือ ผิด!',false)}<span style="font-size:10.5px;color:#b91c1c;"> · ใบคำสั่งกำหนดต้องมีชื่อเรือ แต่ไม่พบในเอกสาร</span></div>`; }
+          else _vRow();
+        }
+        /* ไม่ติ๊ก → ข้ามชื่อเรือใน PHYTO (ไม่โชว์ ไม่ฟ้อง) */
+      } else if(_hasVes){ _vRow(); }
     }
     /* วันที่อินวอยซ์ / วันที่เรือ — แสดงเมื่อเอกสารมีวันที่นั้น */
     const iv=d.invoice_date||{}, vd=d.vessel_date||{};
