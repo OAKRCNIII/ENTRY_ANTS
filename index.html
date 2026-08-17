@@ -756,7 +756,7 @@ const ROLE_TABS = {
 /* role ที่แก้ใบคำสั่งได้ */
 const canEditWO = () => (USER_ROLE==='admin' || USER_ROLE==='doc_wo');
 /* กด AI CHECK ได้เฉพาะ RCN (คนอื่นเห็นผล + กดดูย้อนหลัง/พรีวิวได้ แต่กดตรวจใหม่ไม่ได้) */
-const AI_RUN_USERS = ['OAK_THIRA','PLA_ANTS'];
+const AI_RUN_USERS = ['OAK_THIRA'];
 const canRunAI = () => AI_RUN_USERS.includes(LOGGED_USER);
 /* role ที่อัพได้เฉพาะ DRAFT (ซ่อน FINAL + ปุ่มลบ + Dashboard) */
 const isDraftOnly = () => (USER_ROLE==='doc_draft' || USER_ROLE==='doc_wo');
@@ -1418,17 +1418,17 @@ async function uploadDocs(){
     loadDocHistory();
     /* OAK อัพ → บอทตรวจอัตโนมัติเฉพาะ DRAFT ที่เพิ่งอัพในรอบนี้ (ไฟล์เดิมไม่แตะ) */
     const draftTypes = fail ? [] : [...new Set(batches.filter(b=>b.stage==='DRAFT').map(b=>b.dtype))];
-    if(canRunAI() && draftTypes.length) autoAiCheck(draftTypes);
+    if(draftTypes.length) autoAiCheck(draftTypes);   /* ใครอัพก็ตรวจอัตโนมัติ */
   }
 }
 /* บอทตรวจไฟล์ที่เพิ่งอัพ (ทีละใบ) — เฉพาะ OAK · ข้ามใบที่ยังไม่มีใบคำสั่ง */
 async function autoAiCheck(types){
-  if(!canRunAI() || !types.length) return;
+  if(!types.length) return;
   const msg = document.getElementById('docMsg');
   for(let i=0;i<types.length;i++){
     const t=types[i];
     if(msg){ msg.textContent=`🤖 AI กำลังตรวจ ${docTypeLabel(t)} (${i+1}/${types.length}) ...`; msg.style.color='#4338ca'; }
-    try{ await checkDocAI(t); }catch(e){}
+    try{ await checkDocAI(t, true); }catch(e){}   /* true = auto (ข้าม canRunAI) */
   }
   if(msg){ msg.textContent='🤖 AI ตรวจไฟล์ที่เพิ่งอัพเสร็จแล้ว — ดูสถานะที่คอลัมน์ BY AI'; msg.style.color='#4338ca'; }
 }
@@ -1481,8 +1481,8 @@ async function mergeDocsEntry(stage){
 }
 
 /* 🤖 ให้ AI ช่วยตรวจเอกสาร DRAFT — AI อ่าน + โค้ดเทียบเบอร์ตู้/CONSIGNEE (เฉพาะ OAK/PLA) */
-async function checkDocAI(type){
-  if(!canRunAI()) return;   /* กดตรวจ AI ได้เฉพาะ RCN */
+async function checkDocAI(type, auto){
+  if(!auto && !canRunAI()) return;   /* กดปุ่มเอง = เฉพาะ RCN · auto (ตอน upload) = ใครก็ได้ */
   const inv = (window._docReviewInv || document.getElementById('docInv').value || '').trim();
   if(!inv) return;
   const lf = (window._docMergeFiles && window._docMergeFiles.DRAFT || []).find(f=>f.label===docTypeLabel(type));
