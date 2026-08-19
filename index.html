@@ -478,6 +478,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
         <button class="vsl-nav-btn" onclick="nextVsl()">ถัดไป →</button>
         <button class="vsl-cfg-btn" id="vslCfgBtn" onclick="saveVslCfg()">💾 บันทึก config เรือ</button>
         <button class="vsl-draft-btn" id="vslDraftBtn" onclick="saveAllDraft()">📋 บันทึก Draft ทั้ง 10 ลำ</button>
+        <button type="button" onclick="openBkgHistory('')" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:700;color:#0f2a52;cursor:pointer;white-space:nowrap;">📜 ประวัติบุคกิ้ง</button>
       </div>
       <div class="form-msg" id="draftMsg" style="margin-bottom:10px;"></div>
 
@@ -528,7 +529,8 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                   <th>BKG NO.</th>
                   <th style="width:52px;">VOL</th>
                   <th>หมายเหตุ</th>
-                  <th style="width:66px;">จัดการ</th>
+                  <th style="width:54px;">ย้าย</th>
+                  <th style="width:54px;">แยก</th>
                 </tr>
               </thead>
               <tbody id="xlsLoyBody"><!-- JS --></tbody>
@@ -536,7 +538,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                 <tr>
                   <td class="xls-tot-lbl" colspan="2">รวม</td>
                   <td class="xls-tot-val" id="xlsLoyTotal">0</td>
-                  <td style="background:#e8f5e9;border-color:#c8e6c9;" colspan="2"></td>
+                  <td style="background:#e8f5e9;border-color:#c8e6c9;" colspan="3"></td>
                 </tr>
               </tfoot>
             </table>
@@ -579,6 +581,19 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
               <button type="button" onclick="document.getElementById('splitModal').style.display='none'" style="flex:1;padding:9px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-weight:700;cursor:pointer;color:#475569;">ยกเลิก</button>
               <button type="button" onclick="confirmSplit()" style="flex:1;padding:9px;border:none;background:#b91c1c;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;">✂ แยกเลย</button>
             </div>
+          </div>
+        </div>
+
+        <!-- MODAL: ประวัติบุคกิ้ง -->
+        <div id="bkgHistModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);align-items:center;justify-content:center;z-index:9998;" onclick="if(event.target===this)this.style.display='none'">
+          <div style="background:#fff;border-radius:14px;padding:20px 22px;width:420px;max-width:94vw;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+            <div style="font-size:15px;font-weight:800;color:#0f2a52;margin-bottom:10px;">📜 ประวัติบุคกิ้ง</div>
+            <div style="display:flex;gap:6px;margin-bottom:12px;">
+              <input id="bkgHistInput" type="text" placeholder="เลขบุคกิ้ง เช่น #5453" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')searchBkgHistory()" style="flex:1;box-sizing:border-box;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;">
+              <button type="button" onclick="searchBkgHistory()" style="padding:8px 14px;border:none;background:#1e40af;color:#fff;border-radius:8px;font-weight:700;cursor:pointer;">ค้นหา</button>
+            </div>
+            <div id="bkgHistResult" style="overflow-y:auto;flex:1;min-height:60px;"></div>
+            <div style="text-align:right;margin-top:12px;"><button type="button" onclick="document.getElementById('bkgHistModal').style.display='none'" style="padding:8px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;font-weight:700;cursor:pointer;color:#475569;">ปิด</button></div>
           </div>
         </div>
 
@@ -2960,7 +2975,8 @@ function buildLoyTableHtml(loyData){
       <td><input class="xci" id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
       <td><input class="xci" id="xl_vol_${r}" type="number" min="0" value="${ld.vol||''}" style="text-align:center;" oninput="calcXlsTotals();saveLoyDraft()"></td>
       <td><input class="xci" id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
-      <td style="text-align:center;white-space:nowrap;">${ld.bkg?`<button type="button" onclick="reviseLoy(${r})" title="ย้ายไปเรืออื่น" style="font-size:10.5px;padding:2px 6px;border:1px solid #93c5fd;background:#eff6ff;color:#1e40af;border-radius:6px;font-weight:700;cursor:pointer;display:block;width:100%;margin-bottom:2px;">↪ ย้าย</button><button type="button" onclick="splitLoy(${r})" title="ซอยบุคกิ้งเป็นหลายอัน" style="font-size:10.5px;padding:2px 6px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:6px;font-weight:700;cursor:pointer;display:block;width:100%;">✂ แยก</button>`:''}</td>
+      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="reviseLoy(${r})" title="ย้ายไปเรืออื่น" style="font-size:10.5px;padding:2px 7px;border:1px solid #93c5fd;background:#eff6ff;color:#1e40af;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;">↪ ย้าย</button>`:''}</td>
+      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="splitLoy(${r})" title="ซอยบุคกิ้งเป็นหลายอัน" style="font-size:10.5px;padding:2px 7px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;">✂ แยก</button>`:''}</td>
     </tr>`;
   }
   return lhtml;
@@ -3214,6 +3230,7 @@ async function confirmRevise(){
   for(let k=0;k<tgt.length;k++){ if(!tgt[k] || !tgt[k].bkg){ tgt[k] = moved; placed = true; break; } }
   if(!placed) tgt.push(moved);
   saveLoyRows(j, tgt);
+  _logBookingEvent({ booking_no: moved.bkg, event_type:'move', from_vessel:(loadSlotConfigs()[idx]||{}).vessel||'', to_vessel: tc.vessel||'', vol });
   document.getElementById('reviseModal').style.display = 'none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));   // รีเฟรชลำนี้ → หายไป
   calcXlsTotals();
@@ -3278,10 +3295,49 @@ function confirmSplit(){
   }
   compact.splice(compactIdx, 1, ...newRows);
   saveLoyRows(idx, compact);
+  _logBookingEvent({ booking_no: src.bkg, event_type:'split', vol: src.vol, detail:'แยกเป็น '+newRows.map(x=>x.bkg+'('+x.vol+')').join(', ') });
+  newRows.forEach(x=>{ if(x.bkg!==src.bkg) _logBookingEvent({ booking_no:x.bkg, event_type:'split_from', vol:x.vol, detail:'แยกมาจาก '+src.bkg }); });
   document.getElementById('splitModal').style.display = 'none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));
   calcXlsTotals();
   alert('✅ แยก ' + src.bkg + ' เป็น ' + newRows.length + ' บุคกิ้ง:\n' + newRows.map(x=>x.bkg+' ('+x.vol+')').join(', '));
+}
+
+// ── ประวัติบุคกิ้ง: log event + ค้นหา ──
+async function _logBookingEvent(ev){
+  try{ await sb.from('booking_events').insert({ ...ev, by_user: (LOGGED_USER||'?') }); }
+  catch(e){ console.warn('log booking event fail', e); }
+}
+function openBkgHistory(pref){
+  document.getElementById('bkgHistInput').value = pref || '';
+  document.getElementById('bkgHistResult').innerHTML = '';
+  document.getElementById('bkgHistModal').style.display = 'flex';
+  if(pref) searchBkgHistory(); else setTimeout(()=>document.getElementById('bkgHistInput').focus(), 50);
+}
+async function searchBkgHistory(){
+  const q = document.getElementById('bkgHistInput').value.trim().toUpperCase();
+  const box = document.getElementById('bkgHistResult');
+  if(!q){ box.innerHTML = ''; return; }
+  box.innerHTML = '<div style="color:#64748b;padding:10px;">กำลังค้นหา…</div>';
+  try{
+    const { data, error } = await sb.from('booking_events')
+      .select('event_type,from_vessel,to_vessel,vol,detail,at,by_user')
+      .eq('booking_no', q).order('at', { ascending:true });
+    if(error) throw error;
+    if(!data || !data.length){ box.innerHTML = '<div style="color:#94a3b8;padding:14px;text-align:center;">ไม่มีประวัติของ '+h(q)+'</div>'; return; }
+    box.innerHTML = data.map(ev=>{
+      let t=''; try{ t = new Date(ev.at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ t = ev.at; }
+      let icon='•', label=ev.detail||ev.event_type;
+      if(ev.event_type==='move'){ icon='↪'; label='ย้าย: '+(ev.from_vessel||'?')+' → '+(ev.to_vessel||'?')+(ev.vol?' ('+ev.vol+' ตู้)':''); }
+      else if(ev.event_type==='split'){ icon='✂'; label=ev.detail||'ซอยบุคกิ้ง'; }
+      else if(ev.event_type==='split_from'){ icon='↳'; label=ev.detail||'แยกมา'; }
+      return `<div style="display:flex;gap:9px;padding:9px 4px;border-bottom:1px solid #f1f5f9;align-items:flex-start;">
+        <span style="font-size:15px;line-height:1.2;">${icon}</span>
+        <div style="flex:1;"><div style="font-size:12.5px;color:#0f2a52;font-weight:600;line-height:1.4;">${h(label)}</div>
+        <div style="font-size:10.5px;color:#94a3b8;margin-top:1px;">${h(t)}${ev.by_user?' · '+h(ev.by_user):''}</div></div>
+      </div>`;
+    }).join('');
+  }catch(e){ box.innerHTML = '<div style="color:#b91c1c;padding:10px;">ค้นหาไม่สำเร็จ: '+h(String(e.message||e))+'</div>'; }
 }
 
 // ── Save vessel config (name + date) to localStorage ──
