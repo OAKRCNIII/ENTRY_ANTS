@@ -2988,7 +2988,7 @@ function buildLoyTableHtml(loyData){
     const ld = loyData[r] || {};
     lhtml += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td><input class="xci" id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
+      <td style="position:relative;"><input class="xci" id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()" style="padding-right:20px;">${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
       <td><input class="xci" id="xl_vol_${r}" type="number" min="0" value="${ld.vol||''}" style="text-align:center;" oninput="calcXlsTotals();saveLoyDraft()"></td>
       <td><input class="xci" id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่กับอินวอยซ์" style="font-size:10.5px;padding:2px 7px;border:1px solid #86efac;background:#f0fdf4;color:#15803d;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;">🔗 จับคู่</button>`:''}</td>
