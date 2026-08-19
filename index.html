@@ -529,9 +529,9 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                   <th>BKG NO.</th>
                   <th style="width:52px;">VOL</th>
                   <th>หมายเหตุ</th>
-                  <th style="width:62px;">จับคู่</th>
-                  <th style="width:48px;">ย้าย</th>
-                  <th style="width:48px;">แยก</th>
+                  <th style="width:30px;" title="จับคู่อินวอยซ์">🔗</th>
+                  <th style="width:30px;" title="ย้ายเรือ">↪</th>
+                  <th style="width:30px;" title="ซอยบุคกิ้ง">✂</th>
                 </tr>
               </thead>
               <tbody id="xlsLoyBody"><!-- JS --></tbody>
@@ -2991,9 +2991,9 @@ function buildLoyTableHtml(loyData){
       <td style="position:relative;"><input class="xci" id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()" style="padding-right:20px;">${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
       <td><input class="xci" id="xl_vol_${r}" type="number" min="0" value="${ld.vol||''}" style="text-align:center;" oninput="calcXlsTotals();saveLoyDraft()"></td>
       <td><input class="xci" id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
-      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่กับอินวอยซ์" style="font-size:10.5px;padding:2px 7px;border:1px solid #86efac;background:#f0fdf4;color:#15803d;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;">🔗 จับคู่</button>`:''}</td>
-      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="reviseLoy(${r})" title="ย้ายไปเรืออื่น" style="font-size:10.5px;padding:2px 7px;border:1px solid #93c5fd;background:#eff6ff;color:#1e40af;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;">↪ ย้าย</button>`:''}</td>
-      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="splitLoy(${r})" title="ซอยบุคกิ้งเป็นหลายอัน" style="font-size:10.5px;padding:2px 7px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;">✂ แยก</button>`:''}</td>
+      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่อินวอยซ์" style="font-size:13px;padding:1px 5px;border:1px solid #86efac;background:#f0fdf4;border-radius:6px;cursor:pointer;">🔗</button>`:''}</td>
+      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="reviseLoy(${r})" title="ย้ายไปเรืออื่น" style="font-size:13px;padding:1px 5px;border:1px solid #93c5fd;background:#eff6ff;border-radius:6px;cursor:pointer;">↪</button>`:''}</td>
+      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="splitLoy(${r})" title="ซอยบุคกิ้ง" style="font-size:13px;padding:1px 5px;border:1px solid #fca5a5;background:#fef2f2;border-radius:6px;cursor:pointer;">✂</button>`:''}</td>
     </tr>`;
   }
   return lhtml;
@@ -3168,6 +3168,22 @@ function calcXlsTotals(){
 
 // ── Clear a single invoice row ──
 function clearInvRow(r){
+  const bkg = (document.getElementById('xi_bkg_'+r)?.value || '').trim().toUpperCase();
+  const vol = parseFloat(document.getElementById('xi_vol_'+r)?.value) || 0;
+  const inv = (document.getElementById('xi_inv_'+r)?.value || '').trim();
+  if(bkg){
+    // มีบุคกิ้ง → ส่งกลับไปเป็นลอย (ไม่ลบทิ้ง)
+    const idx = currentVslIdx;
+    saveLoyDraft();
+    const loy = loadLoyRows(idx);
+    const back = { bkg, vol, rem:'' };
+    let placed=false;
+    for(let k=0;k<loy.length;k++){ if(!loy[k] || !loy[k].bkg){ loy[k]=back; placed=true; break; } }
+    if(!placed) loy.push(back);
+    saveLoyRows(idx, loy);
+    _queueBookingEvent({ booking_no:bkg, event_type:'unassign', vol, detail:'ยกเลิกจับคู่'+(inv?(' '+inv):'')+' → กลับเป็นลอย ('+((loadSlotConfigs()[idx]||{}).vessel||'')+')' });
+    document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));
+  }
   ['xi_inv_','xi_des_','xi_bkg_','xi_vol_'].forEach(p=>{
     const el = document.getElementById(p+r);
     if(el) el.value = '';
@@ -3247,7 +3263,7 @@ async function confirmRevise(){
   for(let k=0;k<tgt.length;k++){ if(!tgt[k] || !tgt[k].bkg){ tgt[k] = moved; placed = true; break; } }
   if(!placed) tgt.push(moved);
   saveLoyRows(j, tgt);
-  _logBookingEvent({ booking_no: moved.bkg, event_type:'move', from_vessel:(loadSlotConfigs()[idx]||{}).vessel||'', to_vessel: tc.vessel||'', vol });
+  _queueBookingEvent({ booking_no: moved.bkg, event_type:'move', from_vessel:(loadSlotConfigs()[idx]||{}).vessel||'', to_vessel: tc.vessel||'', vol });
   document.getElementById('reviseModal').style.display = 'none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));   // รีเฟรชลำนี้ → หายไป
   calcXlsTotals();
@@ -3312,8 +3328,8 @@ function confirmSplit(){
   }
   compact.splice(compactIdx, 1, ...newRows);
   saveLoyRows(idx, compact);
-  _logBookingEvent({ booking_no: src.bkg, event_type:'split', vol: src.vol, detail:'แยกเป็น '+newRows.map(x=>x.bkg+'('+x.vol+')').join(', ') });
-  newRows.forEach(x=>{ if(x.bkg!==src.bkg) _logBookingEvent({ booking_no:x.bkg, event_type:'split_from', vol:x.vol, detail:'แยกมาจาก '+src.bkg }); });
+  _queueBookingEvent({ booking_no: src.bkg, event_type:'split', vol: src.vol, detail:'แยกเป็น '+newRows.map(x=>x.bkg+'('+x.vol+')').join(', ') });
+  newRows.forEach(x=>{ if(x.bkg!==src.bkg) _queueBookingEvent({ booking_no:x.bkg, event_type:'split_from', vol:x.vol, detail:'แยกมาจาก '+src.bkg }); });
   document.getElementById('splitModal').style.display = 'none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));
   calcXlsTotals();
@@ -3326,11 +3342,16 @@ async function assignLoy(r){
   const idx = currentVslIdx;
   const row = loadLoyRows(idx)[r];
   if(!row || !row.bkg){ alert('แถวนี้ไม่มีบุคกิ้ง'); return; }
-  if(!allInvMap || allInvMap.size===0){ try{ await loadAllInvoices(); }catch(e){} }
+  try{ await loadAllInvoices(); }catch(e){}   // refresh allInvMap + plannedInvSet (invoice ในเรือ DB/shipped)
   window._assignSrc = { idx, r, bkg:row.bkg, vol:Number(row.vol)||0, rem:row.rem||'' };
   document.getElementById('assignInfo').textContent = 'บุคกิ้ง ' + row.bkg + ' · ' + (Number(row.vol)||0) + ' ตู้';
-  const opts = ['<option value="">— เลือกอินวอยซ์ —</option>'];
+  // invoice ที่อยู่ใน "ร่าง" ทุก slot (localStorage) — ยังไม่ลง DB
+  const draftInvSet = new Set();
+  for(let i=0;i<SLOT_COUNT;i++){ loadInvDraft(i).forEach(x=>{ if(x&&x.inv) draftInvSet.add(String(x.inv).toUpperCase()); }); }
+  // dropdown = อินวอยซ์ที่ยังว่าง (ไม่อยู่เรือไหน + ไม่อยู่ร่างไหน)
+  const opts = ['<option value="">— เลือกอินวอยซ์ (ที่ยังว่าง) —</option>'];
   [...allInvMap.entries()].forEach(([inv,d])=>{
+    if(plannedInvSet.has(inv) || draftInvSet.has(inv)) return;
     opts.push(`<option value="${h(inv)}" data-vol="${d.container_count||''}" data-des="${h(d.destination||'')}">${h(inv)} (${d.container_count||'?'} ตู้)</option>`);
   });
   document.getElementById('assignSelect').innerHTML = opts.join('');
@@ -3363,7 +3384,7 @@ function confirmAssign(){
   for(let k=0;k<invDraft.length;k++){ if(!invDraft[k] || !invDraft[k].inv){ invDraft[k]=newRow; placed=true; break; } }
   if(!placed) invDraft.push(newRow);
   localStorage.setItem(getInvKey(idx), JSON.stringify(invDraft));
-  _logBookingEvent({ booking_no: moved.bkg, event_type:'assign', vol: moved.vol, detail:'จับคู่อินวอยซ์ '+inv+' ('+((loadSlotConfigs()[idx]||{}).vessel||'')+')' });
+  _queueBookingEvent({ booking_no: moved.bkg, event_type:'assign', vol: moved.vol, detail:'จับคู่อินวอยซ์ '+inv+' ('+((loadSlotConfigs()[idx]||{}).vessel||'')+')' });
   document.getElementById('assignModal').style.display = 'none';
   const c = loadSlotConfigs()[idx] || {};
   document.getElementById('xlsInvBody').innerHTML = buildInvTableHtml(c, []);
@@ -3373,9 +3394,22 @@ function confirmAssign(){
 }
 
 // ── ประวัติบุคกิ้ง: log event + ค้นหา ──
-async function _logBookingEvent(ev){
-  try{ await sb.from('booking_events').insert({ ...ev, by_user: (LOGGED_USER||'?') }); }
-  catch(e){ console.warn('log booking event fail', e); }
+/* คิว event ไว้ใน localStorage — insert ลง DB ตอนกดบันทึก Draft เท่านั้น (ประวัติตรงกับของจริงเสมอ) */
+function _queueBookingEvent(ev){
+  try{ const k='ants_bkg_events_pending'; const a=JSON.parse(localStorage.getItem(k)||'[]');
+    a.push({ ...ev, by_user:(LOGGED_USER||'?') }); localStorage.setItem(k, JSON.stringify(a)); }catch(e){}
+}
+async function _flushBookingEvents(){
+  try{ const k='ants_bkg_events_pending'; const a=JSON.parse(localStorage.getItem(k)||'[]');
+    if(!a.length) return; const { error } = await sb.from('booking_events').insert(a);
+    if(!error) localStorage.removeItem(k); else console.warn('flush events:', error.message); }catch(e){}
+}
+async function deleteBkgEvent(id){
+  const pin = prompt('ใส่รหัสเพื่อลบประวัตินี้:');
+  if(pin===null) return;
+  if(pin!=='625465'){ alert('รหัสไม่ถูกต้อง'); return; }
+  try{ const { error } = await sb.from('booking_events').delete().eq('id', id); if(error) throw error; searchBkgHistory(); }
+  catch(e){ alert('ลบไม่สำเร็จ: '+(e.message||e)); }
 }
 function openBkgHistory(pref){
   document.getElementById('bkgHistInput').value = pref || '';
@@ -3390,7 +3424,7 @@ async function searchBkgHistory(){
   box.innerHTML = '<div style="color:#64748b;padding:10px;">กำลังค้นหา…</div>';
   try{
     const { data, error } = await sb.from('booking_events')
-      .select('event_type,from_vessel,to_vessel,vol,detail,at,by_user')
+      .select('id,event_type,from_vessel,to_vessel,vol,detail,at,by_user')
       .eq('booking_no', q).order('at', { ascending:true });
     if(error) throw error;
     if(!data || !data.length){ box.innerHTML = '<div style="color:#94a3b8;padding:14px;text-align:center;">ไม่มีประวัติของ '+h(q)+'</div>'; return; }
@@ -3405,6 +3439,7 @@ async function searchBkgHistory(){
         <span style="font-size:15px;line-height:1.2;">${icon}</span>
         <div style="flex:1;"><div style="font-size:12.5px;color:#0f2a52;font-weight:600;line-height:1.4;">${h(label)}</div>
         <div style="font-size:10.5px;color:#94a3b8;margin-top:1px;">${h(t)}${ev.by_user?' · '+h(ev.by_user):''}</div></div>
+        <button type="button" onclick="deleteBkgEvent(${ev.id})" title="ลบประวัตินี้ (ใส่รหัส)" style="border:none;background:none;color:#cbd5e1;cursor:pointer;font-size:13px;padding:2px 4px;line-height:1;">✕</button>
       </div>`;
     }).join('');
   }catch(e){ box.innerHTML = '<div style="color:#b91c1c;padding:10px;">ค้นหาไม่สำเร็จ: '+h(String(e.message||e))+'</div>'; }
@@ -3662,6 +3697,7 @@ async function saveAllDraft(){
       const payloadNoSrc = payload.map(({source,...r})=>r);
       const { error: e2 } = await sb.from('vessel_plan').delete().gte('id',0).execute?.() || {};
       await sb.from('vessel_plan').insert(payloadNoSrc);
+      await _flushBookingEvents();
       showMsg('draftMsg', `✅ บันทึก Draft สำเร็จ ${payload.length} แถว (${[...new Set(payload.map(r=>r.vessel_name))].length} ลำ)`, 'success');
     } else {
       showMsg('draftMsg','❌ '+insErr.message,'error');
@@ -3669,6 +3705,7 @@ async function saveAllDraft(){
     return;
   }
 
+  await _flushBookingEvents();   // บันทึกสำเร็จ → ลงประวัติที่คิวไว้
   const vessels = [...new Set(payload.map(r => r.vessel_name))];
   showMsg('draftMsg',
     `✅ บันทึก Draft สำเร็จ ${payload.length} แถว · ${vessels.length} ลำ: ${vessels.join(', ')}`,
