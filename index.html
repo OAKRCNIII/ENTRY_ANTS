@@ -223,7 +223,7 @@ table.batch-tbl tr:hover td{background:#f8fafc;}
 .xls-date-inp:focus{border-color:#ff6b6b;}
 .xls-panes{display:flex;overflow-x:auto;}
 .xls-left{flex:1;min-width:520px;border-right:3px solid #a5d6a7;}
-.xls-right{width:310px;flex-shrink:0;}
+.xls-right{width:400px;flex-shrink:0;}
 /* Excel table */
 table.xls-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
 table.xls-tbl thead th{background:#c8e6c9;border:1px solid #a5d6a7;padding:7px 5px;font-size:10.5px;font-weight:700;color:#1b5e20;text-align:center;white-space:nowrap;}
@@ -526,7 +526,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
               <thead>
                 <tr>
                   <th style="width:36px;">ลอย</th>
-                  <th>BKG NO.</th>
+                  <th style="min-width:132px;">BKG NO.</th>
                   <th style="width:52px;">VOL</th>
                   <th>หมายเหตุ</th>
                   <th style="width:30px;" title="จับคู่อินวอยซ์">🔗</th>
@@ -2968,16 +2968,14 @@ function buildInvTableHtml(c, dbRows){
   let html = '';
   for(let r=0;r<INV_ROWS;r++){
     const d = src[r] || {};
-    const desOpts = DEST_LIST.map(dd=>`<option value="${dd}"${d.destination===dd?' selected':''}>${dd}</option>`).join('');
+    const _ro = 'width:100%;box-sizing:border-box;border:none;background:transparent;cursor:default;padding:6px 8px;font-size:12.5px;color:#0f2a52;outline:none;';   /* โชว์อย่างเดียว แก้ไม่ได้ */
     html += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td><input class="xci" id="xi_inv_${r}" type="text" list="allInvDatalist" value="${h(d.invoice_no||'')}" oninput="this.value=this.value.toUpperCase();onInvSelect(${r})" onchange="onInvSelect(${r})"></td>
-      <td><select class="xcis" id="xi_des_${r}" onchange="calcXlsTotals();saveInvDraft()">
-        <option value=""></option>${desOpts}
-      </select></td>
-      <td><input class="xci" id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" oninput="this.value=this.value.toUpperCase();saveInvDraft()"></td>
-      <td><input class="xci" id="xi_vol_${r}" type="number" min="0" value="${d.container_count||''}" style="text-align:center;" oninput="calcXlsTotals();saveInvDraft()"></td>
-      <td><button class="xci-del" onclick="clearInvRow(${r})" title="ล้างแถว">✕</button></td>
+      <td><input id="xi_inv_${r}" type="text" value="${h(d.invoice_no||'')}" readonly tabindex="-1" style="${_ro}"></td>
+      <td><input id="xi_des_${r}" type="text" value="${h(d.destination||'')}" readonly tabindex="-1" style="${_ro}color:#334155;"></td>
+      <td><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}"></td>
+      <td><input id="xi_vol_${r}" type="text" value="${d.container_count||''}" readonly tabindex="-1" style="${_ro}text-align:center;"></td>
+      <td>${(d.invoice_no||d.booking_no)?`<button class="xci-del" onclick="clearInvRow(${r})" title="เอาบุคกิ้งกลับเป็นลอย">✕</button>`:''}</td>
     </tr>`;
   }
   return html;
