@@ -528,7 +528,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                   <th>BKG NO.</th>
                   <th style="width:52px;">VOL</th>
                   <th>หมายเหตุ</th>
-                  <th style="width:58px;">ย้าย</th>
+                  <th style="width:66px;">จัดการ</th>
                 </tr>
               </thead>
               <tbody id="xlsLoyBody"><!-- JS --></tbody>
@@ -557,6 +557,27 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
             <div style="display:flex;gap:8px;margin-top:18px;">
               <button type="button" onclick="document.getElementById('reviseModal').style.display='none'" style="flex:1;padding:9px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-weight:700;cursor:pointer;color:#475569;">ยกเลิก</button>
               <button type="button" onclick="confirmRevise()" style="flex:1;padding:9px;border:none;background:#1e40af;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;">↪ ย้ายเลย</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODAL: ซอยบุคกิ้ง (SPLIT) -->
+        <div id="splitModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);align-items:center;justify-content:center;z-index:9998;" onclick="if(event.target===this)this.style.display='none'">
+          <div style="background:#fff;border-radius:14px;padding:20px 22px;width:360px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+            <div style="font-size:15px;font-weight:800;color:#0f2a52;margin-bottom:3px;">✂ ซอยบุคกิ้ง</div>
+            <div id="splitInfo" style="font-size:12px;color:#64748b;margin-bottom:12px;"></div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:700;color:#334155;">แยกเป็นกี่บุคกิ้ง:</label>
+              <input id="splitCount" type="number" min="2" max="12" value="2" onchange="splitGenRows()" oninput="splitGenRows()" style="width:64px;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;text-align:center;">
+            </div>
+            <div style="display:flex;gap:6px;font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:4px;padding:0 4px;">
+              <span style="width:16px;"></span><span style="flex:1;">เลขบุคกิ้ง</span><span style="width:64px;text-align:center;">ตู้</span>
+            </div>
+            <div id="splitRows"></div>
+            <div id="splitSum" style="font-size:11.5px;color:#64748b;margin-top:6px;text-align:right;"></div>
+            <div style="display:flex;gap:8px;margin-top:16px;">
+              <button type="button" onclick="document.getElementById('splitModal').style.display='none'" style="flex:1;padding:9px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-weight:700;cursor:pointer;color:#475569;">ยกเลิก</button>
+              <button type="button" onclick="confirmSplit()" style="flex:1;padding:9px;border:none;background:#b91c1c;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;">✂ แยกเลย</button>
             </div>
           </div>
         </div>
@@ -2939,7 +2960,7 @@ function buildLoyTableHtml(loyData){
       <td><input class="xci" id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
       <td><input class="xci" id="xl_vol_${r}" type="number" min="0" value="${ld.vol||''}" style="text-align:center;" oninput="calcXlsTotals();saveLoyDraft()"></td>
       <td><input class="xci" id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
-      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="reviseLoy(${r})" title="ย้ายบุคกิ้งไปเรืออื่น" style="font-size:11px;padding:2px 7px;border:1px solid #93c5fd;background:#eff6ff;color:#1e40af;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;">↪ ย้าย</button>`:''}</td>
+      <td style="text-align:center;white-space:nowrap;">${ld.bkg?`<button type="button" onclick="reviseLoy(${r})" title="ย้ายไปเรืออื่น" style="font-size:10.5px;padding:2px 6px;border:1px solid #93c5fd;background:#eff6ff;color:#1e40af;border-radius:6px;font-weight:700;cursor:pointer;display:block;width:100%;margin-bottom:2px;">↪ ย้าย</button><button type="button" onclick="splitLoy(${r})" title="ซอยบุคกิ้งเป็นหลายอัน" style="font-size:10.5px;padding:2px 6px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:6px;font-weight:700;cursor:pointer;display:block;width:100%;">✂ แยก</button>`:''}</td>
     </tr>`;
   }
   return lhtml;
@@ -3197,6 +3218,70 @@ async function confirmRevise(){
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));   // รีเฟรชลำนี้ → หายไป
   calcXlsTotals();
   alert('✅ ย้าย ' + moved.bkg + ' (' + vol + ' ตู้) → ' + (tc.vessel || 'เรือปลายทาง') + '\nไปกดดูที่เรือปลายทางได้เลย (อย่าลืมกดบันทึก Draft)');
+}
+
+// ── SPLIT: ซอยบุคกิ้งลอยเป็นหลายอัน (เลขใหม่ default ถัดจากเดิม) ──
+function splitLoy(r){
+  saveLoyDraft();
+  const idx  = currentVslIdx;
+  const rows = loadLoyRows(idx);
+  const row  = rows[r];
+  if(!row || !row.bkg){ alert('แถวนี้ไม่มีบุคกิ้ง'); return; }
+  window._splitSrc = { idx, r, bkg: row.bkg, vol: row.vol||0, rem: row.rem||'' };
+  document.getElementById('splitInfo').textContent = 'บุคกิ้งเดิม ' + row.bkg + ' · ' + (row.vol||0) + ' ตู้';
+  document.getElementById('splitCount').value = 2;
+  splitGenRows();
+  document.getElementById('splitModal').style.display = 'flex';
+}
+function _bkgNext(bkg, step){                  // prefix + เลขท้าย(+step) + suffix — คงจำนวนหลัก
+  const m = String(bkg).match(/^(.*?)(\d+)(\D*)$/);
+  if(!m) return '';
+  return m[1] + String(parseInt(m[2],10) + step).padStart(m[2].length,'0') + m[3];
+}
+function splitGenRows(){
+  const src = window._splitSrc; if(!src) return;
+  let n = parseInt(document.getElementById('splitCount').value) || 2;
+  if(n < 2) n = 2; if(n > 12) n = 12;
+  let html = '';
+  for(let i=0;i<n;i++){
+    const bkg = i===0 ? src.bkg : (_bkgNext(src.bkg, i) || '');
+    const vol = i===0 ? (src.vol||0) : '';
+    html += `<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+      <span style="font-size:11px;color:#94a3b8;width:16px;">${i+1}</span>
+      <input class="_splitBkg" type="text" value="${h(bkg)}" placeholder="เลขบุคกิ้ง" oninput="this.value=this.value.toUpperCase()" style="flex:1;box-sizing:border-box;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:7px;font-size:13px;">
+      <input class="_splitVol" type="number" min="0" value="${vol}" placeholder="ตู้" oninput="splitSumUpdate()" style="width:64px;box-sizing:border-box;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:7px;font-size:13px;text-align:center;">
+    </div>`;
+  }
+  document.getElementById('splitRows').innerHTML = html;
+  splitSumUpdate();
+}
+function splitSumUpdate(){
+  const src = window._splitSrc; if(!src) return;
+  const vols = [...document.querySelectorAll('#splitRows ._splitVol')].map(e=>parseFloat(e.value)||0);
+  const sum = vols.reduce((a,b)=>a+b,0), diff = sum - (src.vol||0);
+  document.getElementById('splitSum').innerHTML = 'รวม <b>'+sum+'</b> ตู้ / เดิม '+(src.vol||0)+
+    (diff===0 ? ' <span style="color:#16a34a;">✔ ตรง</span>' : ' <span style="color:#dc2626;">('+(diff>0?'+':'')+diff+')</span>');
+}
+function confirmSplit(){
+  const src = window._splitSrc; if(!src) return;
+  const { idx, r, rem } = src;
+  const bkgs = [...document.querySelectorAll('#splitRows ._splitBkg')].map(e=>e.value.trim().toUpperCase());
+  const vols = [...document.querySelectorAll('#splitRows ._splitVol')].map(e=>parseFloat(e.value)||0);
+  const newRows = [];
+  for(let i=0;i<bkgs.length;i++){ if(bkgs[i]) newRows.push({ bkg:bkgs[i], vol:vols[i], rem:rem }); }
+  if(!newRows.length){ alert('กรุณากรอกเลขบุคกิ้งอย่างน้อย 1 อัน'); return; }
+  const padded = loadLoyRows(idx);
+  const compactIdx = padded.slice(0, r).filter(x=>x&&x.bkg).length;
+  const compact = padded.filter(x=>x&&x.bkg);
+  if(compact.length - 1 + newRows.length > LOY_ROWS){
+    alert('แยกแล้วจะเกิน '+LOY_ROWS+' แถวลอย — ลบบุคกิ้งอื่นก่อน หรือแยกน้อยลง'); return;
+  }
+  compact.splice(compactIdx, 1, ...newRows);
+  saveLoyRows(idx, compact);
+  document.getElementById('splitModal').style.display = 'none';
+  document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));
+  calcXlsTotals();
+  alert('✅ แยก ' + src.bkg + ' เป็น ' + newRows.length + ' บุคกิ้ง:\n' + newRows.map(x=>x.bkg+' ('+x.vol+')').join(', '));
 }
 
 // ── Save vessel config (name + date) to localStorage ──
