@@ -528,6 +528,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                   <th>BKG NO.</th>
                   <th style="width:52px;">VOL</th>
                   <th>หมายเหตุ</th>
+                  <th style="width:58px;">ย้าย</th>
                 </tr>
               </thead>
               <tbody id="xlsLoyBody"><!-- JS --></tbody>
@@ -535,13 +536,30 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                 <tr>
                   <td class="xls-tot-lbl" colspan="2">รวม</td>
                   <td class="xls-tot-val" id="xlsLoyTotal">0</td>
-                  <td style="background:#e8f5e9;border-color:#c8e6c9;"></td>
+                  <td style="background:#e8f5e9;border-color:#c8e6c9;" colspan="2"></td>
                 </tr>
               </tfoot>
             </table>
           </div>
 
         </div><!-- /xls-panes -->
+
+        <!-- MODAL: ย้ายบุคกิ้งไปเรืออื่น (REVISE) -->
+        <div id="reviseModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);align-items:center;justify-content:center;z-index:9998;" onclick="if(event.target===this)this.style.display='none'">
+          <div style="background:#fff;border-radius:14px;padding:20px 22px;width:340px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+            <div style="font-size:15px;font-weight:800;color:#0f2a52;margin-bottom:3px;">↪ ย้ายบุคกิ้งไปเรืออื่น</div>
+            <div id="reviseInfo" style="font-size:12px;color:#64748b;margin-bottom:14px;"></div>
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:3px;">VOL (ตู้) — แก้ได้</label>
+            <input id="reviseVol" type="number" min="0" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:3px;">เรือปลายทาง (เฉพาะที่กำลังวางแพลน)</label>
+            <select id="reviseSelect" onchange="reviseSelChanged()" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;"></select>
+            <div id="reviseDate" style="font-size:12px;color:#0369a1;font-weight:700;margin-top:8px;">📅 วันออกเรือ: —</div>
+            <div style="display:flex;gap:8px;margin-top:18px;">
+              <button type="button" onclick="document.getElementById('reviseModal').style.display='none'" style="flex:1;padding:9px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-weight:700;cursor:pointer;color:#475569;">ยกเลิก</button>
+              <button type="button" onclick="confirmRevise()" style="flex:1;padding:9px;border:none;background:#1e40af;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;">↪ ย้ายเลย</button>
+            </div>
+          </div>
+        </div>
 
         <!-- Footer: Grand total + actions -->
         <div class="xls-footer">
@@ -2921,6 +2939,7 @@ function buildLoyTableHtml(loyData){
       <td><input class="xci" id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
       <td><input class="xci" id="xl_vol_${r}" type="number" min="0" value="${ld.vol||''}" style="text-align:center;" oninput="calcXlsTotals();saveLoyDraft()"></td>
       <td><input class="xci" id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" oninput="this.value=this.value.toUpperCase();saveLoyDraft()"></td>
+      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="reviseLoy(${r})" title="ย้ายบุคกิ้งไปเรืออื่น" style="font-size:11px;padding:2px 7px;border:1px solid #93c5fd;background:#eff6ff;color:#1e40af;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;">↪ ย้าย</button>`:''}</td>
     </tr>`;
   }
   return lhtml;
@@ -3115,6 +3134,69 @@ function saveLoyDraft(){
     });
   }
   saveLoyRows(idx, rows);
+}
+
+// ── REVISE: ย้ายบุคกิ้งลอยไปเรืออื่น (เฉพาะเรือที่กำลังวางแพลน) ──
+function reviseLoy(r){
+  saveLoyDraft();                       // เก็บค่าล่าสุดก่อน
+  const idx  = currentVslIdx;
+  const rows = loadLoyRows(idx);
+  const row  = rows[r];
+  if(!row || !row.bkg){ alert('แถวนี้ไม่มีบุคกิ้ง'); return; }
+  const cfgs = loadSlotConfigs();
+  const opts = [];
+  for(let i=0;i<SLOT_COUNT;i++){        // เรือปลายทาง = slot ที่มีชื่อ+วันที่ ยกเว้นลำปัจจุบัน
+    if(i===idx) continue;
+    const c = cfgs[i] || {};
+    if(c.vessel && c.sailDate)
+      opts.push(`<option value="${i}" data-date="${h(String(c.sailDate).substring(0,10))}">${h(c.vessel)}</option>`);
+  }
+  if(!opts.length){ alert('ยังไม่มีเรือปลายทางที่กำลังวางแพลน\n(ต้องมีเรือลำอื่นที่กรอกชื่อ + วันที่ไว้ก่อน)'); return; }
+  window._reviseSrc = { idx, r };
+  document.getElementById('reviseInfo').textContent = 'บุคกิ้ง ' + row.bkg;
+  document.getElementById('reviseVol').value = row.vol || 0;
+  document.getElementById('reviseSelect').innerHTML = opts.join('');
+  reviseSelChanged();
+  document.getElementById('reviseModal').style.display = 'flex';
+}
+function reviseSelChanged(){
+  const sel = document.getElementById('reviseSelect');
+  const o = sel.options[sel.selectedIndex];
+  document.getElementById('reviseDate').textContent = '📅 วันออกเรือ: ' + (o ? (o.dataset.date || '—') : '—');
+}
+async function confirmRevise(){
+  const src = window._reviseSrc; if(!src) return;
+  const { idx, r } = src;
+  const j = parseInt(document.getElementById('reviseSelect').value);
+  if(isNaN(j)) return;
+  const vol = parseFloat(document.getElementById('reviseVol').value) || 0;
+  const cur = loadLoyRows(idx);
+  if(!cur[r] || !cur[r].bkg){ document.getElementById('reviseModal').style.display='none'; return; }
+  const moved = { bkg: cur[r].bkg, vol: vol, rem: cur[r].rem || '' };
+  const cfgs = loadSlotConfigs();
+  const tc = cfgs[j] || {};
+  let tgt = loadLoyRows(j);
+  /* กันข้อมูลหาย: ถ้าลำปลายทางยังไม่เคยเปิด (localStorage ว่าง) → ดึงลอยจาก DB มา merge ก่อน */
+  if(!tgt.some(x=>x && x.bkg) && tc.vessel && tc.sailDate){
+    try{
+      const { data } = await sb.from('vessel_plan')
+        .select('bkg_no,vol,notes,invoice_no')
+        .eq('vessel_name', tc.vessel).eq('sail_date', String(tc.sailDate).substring(0,10)).eq('sheet_name','WEB');
+      const dbLoy = (data||[]).filter(x=>(x.invoice_no||'').toUpperCase().startsWith('LOY-'))
+                              .map(x=>({ bkg:x.bkg_no||'', vol:x.vol||0, rem:x.notes||'' }));
+      if(dbLoy.length) tgt = dbLoy;
+    }catch(e){ console.warn('revise: โหลดลอยลำปลายทางไม่ได้', e); }
+  }
+  cur.splice(r, 1);                     // เอาออกจากลำนี้ (ยุบแถว)
+  saveLoyRows(idx, cur);
+  let placed = false;                   // ใส่ในลำปลายทาง (แถวว่างแรก หรือต่อท้าย)
+  for(let k=0;k<tgt.length;k++){ if(!tgt[k] || !tgt[k].bkg){ tgt[k] = moved; placed = true; break; } }
+  if(!placed) tgt.push(moved);
+  saveLoyRows(j, tgt);
+  document.getElementById('reviseModal').style.display = 'none';
+  document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));   // รีเฟรชลำนี้ → หายไป
+  calcXlsTotals();
+  alert('✅ ย้าย ' + moved.bkg + ' (' + vol + ' ตู้) → ' + (tc.vessel || 'เรือปลายทาง') + '\nไปกดดูที่เรือปลายทางได้เลย (อย่าลืมกดบันทึก Draft)');
 }
 
 // ── Save vessel config (name + date) to localStorage ──
