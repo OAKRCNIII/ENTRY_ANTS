@@ -223,7 +223,7 @@ table.batch-tbl tr:hover td{background:#f8fafc;}
 .xls-date-inp:focus{border-color:#ff6b6b;}
 .xls-panes{display:flex;overflow-x:auto;}
 .xls-left{flex:1;min-width:520px;border-right:3px solid #a5d6a7;}
-.xls-right{width:400px;flex-shrink:0;}
+.xls-right{width:460px;flex-shrink:0;}
 /* Excel table */
 table.xls-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
 table.xls-tbl thead th{background:#c8e6c9;border:1px solid #a5d6a7;padding:7px 5px;font-size:10.5px;font-weight:700;color:#1b5e20;text-align:center;white-space:nowrap;}
@@ -532,10 +532,11 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                   <th style="min-width:132px;">BKG NO.</th>
                   <th style="width:52px;">VOL</th>
                   <th>หมายเหตุ</th>
-                  <th style="width:30px;" title="จับคู่อินวอยซ์">🔗</th>
-                  <th style="width:30px;" title="ย้ายเรือ">↪</th>
-                  <th style="width:30px;" title="ซอยบุคกิ้ง">✂</th>
-                  <th style="width:30px;" title="ลบ">🗑</th>
+                  <th style="width:28px;" title="จับคู่อินวอยซ์">🔗</th>
+                  <th style="width:28px;" title="ย้ายเรือ">↪</th>
+                  <th style="width:28px;" title="ซอยบุคกิ้ง">✂</th>
+                  <th style="width:28px;" title="แก้ไข">✏️</th>
+                  <th style="width:28px;" title="ลบ">🗑</th>
                 </tr>
               </thead>
               <tbody id="xlsLoyBody"><!-- JS --></tbody>
@@ -543,7 +544,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                 <tr>
                   <td class="xls-tot-lbl" colspan="2">รวม</td>
                   <td class="xls-tot-val" id="xlsLoyTotal">0</td>
-                  <td style="background:#e8f5e9;border-color:#c8e6c9;" colspan="5"></td>
+                  <td style="background:#e8f5e9;border-color:#c8e6c9;" colspan="6"></td>
                 </tr>
               </tfoot>
             </table>
@@ -620,7 +621,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
         <!-- MODAL: เพิ่มบุคกิ้งลอย (ADD BKG) -->
         <div id="addBkgModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);align-items:center;justify-content:center;z-index:9998;">
           <div style="background:#fff;border-radius:14px;padding:20px 22px;width:340px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.35);">
-            <div style="font-size:15px;font-weight:800;color:#0f2a52;margin-bottom:14px;">➕ เพิ่มบุคกิ้งลอย</div>
+            <div id="addBkgTitle" style="font-size:15px;font-weight:800;color:#0f2a52;margin-bottom:14px;">➕ เพิ่มบุคกิ้งลอย</div>
             <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:3px;">เลขบุคกิ้ง</label>
             <input id="addBkgNo" type="text" oninput="this.value=this.value.toUpperCase()" placeholder="เช่น #5453 หรือเลขเต็ม" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;margin-bottom:10px;">
             <div style="display:flex;gap:10px;">
@@ -3016,6 +3017,7 @@ function buildLoyTableHtml(loyData){
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่อินวอยซ์" style="font-size:13px;padding:1px 5px;border:1px solid #86efac;background:#f0fdf4;border-radius:6px;cursor:pointer;">🔗</button>`:''}</td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="reviseLoy(${r})" title="ย้ายไปเรืออื่น" style="font-size:13px;padding:1px 5px;border:1px solid #93c5fd;background:#eff6ff;border-radius:6px;cursor:pointer;">↪</button>`:''}</td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="splitLoy(${r})" title="ซอยบุคกิ้ง" style="font-size:13px;padding:1px 5px;border:1px solid #fca5a5;background:#fef2f2;border-radius:6px;cursor:pointer;">✂</button>`:''}</td>
+      <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="editLoy(${r})" title="แก้ไขบุคกิ้ง" style="font-size:13px;padding:1px 5px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;cursor:pointer;">✏️</button>`:''}</td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="deleteLoy(${r})" title="ลบบุคกิ้ง" style="font-size:13px;padding:1px 4px;border:1px solid #e5e7eb;background:#f9fafb;border-radius:6px;cursor:pointer;">🗑</button>`:''}</td>
     </tr>`;
   }
@@ -3361,9 +3363,21 @@ function confirmSplit(){
 
 // ── ADD BKG: เพิ่มบุคกิ้งลอยใหม่ (ควบคุมผ่าน modal กันพิมพ์มั่ว) ──
 function openAddBkg(){
+  window._addBkgEdit = null;
+  document.getElementById('addBkgTitle').textContent = '➕ เพิ่มบุคกิ้งลอย';
   ['addBkgNo','addBkgVol','addBkgRem'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('addBkgModal').style.display='flex';
   setTimeout(()=>{ const e=document.getElementById('addBkgNo'); if(e)e.focus(); }, 50);
+}
+function editLoy(r){
+  const row = loadLoyRows(currentVslIdx)[r];
+  if(!row || !row.bkg) return;
+  window._addBkgEdit = r;
+  document.getElementById('addBkgTitle').textContent = '✏️ แก้ไขบุคกิ้ง';
+  document.getElementById('addBkgNo').value  = row.bkg;
+  document.getElementById('addBkgVol').value = row.vol || '';
+  document.getElementById('addBkgRem').value = row.rem || '';
+  document.getElementById('addBkgModal').style.display='flex';
 }
 function confirmAddBkg(){
   const bkg = (document.getElementById('addBkgNo').value||'').trim().toUpperCase();
@@ -3372,13 +3386,29 @@ function confirmAddBkg(){
   if(!bkg){ alert('กรุณากรอกเลขบุคกิ้ง'); return; }
   const idx = currentVslIdx;
   const loy = loadLoyRows(idx);
-  if(loy.some(x=>x&&x.bkg===bkg)){ if(!confirm('บุคกิ้ง '+bkg+' มีอยู่แล้วในเรือนี้ — เพิ่มซ้ำ?')) return; }
-  const row = { bkg, vol, rem };
-  let placed=false;
-  for(let k=0;k<loy.length;k++){ if(!loy[k]||!loy[k].bkg){ loy[k]=row; placed=true; break; } }
-  if(!placed) loy.push(row);
-  saveLoyRows(idx, loy);
-  _queueBookingEvent({ booking_no:bkg, event_type:'add', vol, detail:'เพิ่มบุคกิ้งลอย ('+((loadSlotConfigs()[idx]||{}).vessel||'')+')' });
+  const editR = window._addBkgEdit;
+  const vessel = (loadSlotConfigs()[idx]||{}).vessel||'';
+  if(editR!=null && loy[editR]){
+    // ── โหมดแก้ไข ──
+    const old = loy[editR];
+    loy[editR] = { bkg, vol, rem };
+    saveLoyRows(idx, loy);
+    if(old.bkg !== bkg){
+      _queueBookingEvent({ booking_no:old.bkg, event_type:'rename', vol, detail:'เปลี่ยนเลขบุคกิ้ง '+old.bkg+' → '+bkg });
+      _queueBookingEvent({ booking_no:bkg, event_type:'rename', vol, detail:'เปลี่ยนมาจาก '+old.bkg });
+    } else if(Number(old.vol||0)!==vol || (old.rem||'')!==rem){
+      _queueBookingEvent({ booking_no:bkg, event_type:'edit', vol, detail:'แก้ไข'+(Number(old.vol||0)!==vol?(' ตู้ '+(old.vol||0)+'→'+vol):'')+((old.rem||'')!==rem?' · หมายเหตุ':'')+' ('+vessel+')' });
+    }
+  } else {
+    // ── โหมดเพิ่มใหม่ ──
+    if(loy.some(x=>x&&x.bkg===bkg)){ if(!confirm('บุคกิ้ง '+bkg+' มีอยู่แล้วในเรือนี้ — เพิ่มซ้ำ?')) return; }
+    const row = { bkg, vol, rem };
+    let placed=false;
+    for(let k=0;k<loy.length;k++){ if(!loy[k]||!loy[k].bkg){ loy[k]=row; placed=true; break; } }
+    if(!placed) loy.push(row);
+    saveLoyRows(idx, loy);
+    _queueBookingEvent({ booking_no:bkg, event_type:'add', vol, detail:'เพิ่มบุคกิ้งลอย ('+vessel+')' });
+  }
   document.getElementById('addBkgModal').style.display='none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));
   calcXlsTotals();
@@ -3497,6 +3527,8 @@ async function searchBkgHistory(){
       else if(ev.event_type==='assign'){ icon='🔗'; label=ev.detail||'จับคู่อินวอยซ์'; }
       else if(ev.event_type==='add'){ icon='➕'; label=ev.detail||'เพิ่มบุคกิ้งลอย'; }
       else if(ev.event_type==='remove'){ icon='🗑'; label=ev.detail||'ลบบุคกิ้ง'; }
+      else if(ev.event_type==='edit'){ icon='✏️'; label=ev.detail||'แก้ไข'; }
+      else if(ev.event_type==='rename'){ icon='🔤'; label=ev.detail||'เปลี่ยนเลขบุคกิ้ง'; }
       return `<div style="display:flex;gap:9px;padding:9px 4px;border-bottom:1px solid #f1f5f9;align-items:flex-start;">
         <span style="font-size:15px;line-height:1.2;">${icon}</span>
         <div style="flex:1;"><div style="font-size:12.5px;color:#0f2a52;font-weight:600;line-height:1.4;">${h(label)}</div>
