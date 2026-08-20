@@ -3565,17 +3565,18 @@ function printVesselReport(){
   const he = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const all = loadInvDraft(idx).filter(r=>r&&r.inv).map(r=>({inv:r.inv, bkg:r.bkg||'', vol:r.vol||''}));   // เฉพาะอินวอยซ์ (ไม่เอาลอย)
   const totVol = all.reduce((s,r)=>s+(parseFloat(r.vol)||0),0);
-  const ROWS = Math.max(16, all.length);   // 16 แถว (ยืดเต็ม 1 หน้า A4 · ถ้า inv เกินก็ต่อหน้า)
+  const ROWS = Math.max(20, all.length);   // 20 แถวเท่าเดิม (ยืดเต็ม 1 หน้า A4 · ถ้า inv เกินก็ต่อหน้า)
+  const NB = '&nbsp;';   // ใส่ในแถวว่าง เพื่อให้ทุกแถวสูงเท่ากัน (flex กระจายเท่ากันเมื่อ natural height เท่ากัน)
   let body = '', acc = 0;
   for(let i=0;i<ROWS;i++){
     const r = all[i];
-    let accCell = '';
+    let accCell = NB;
     if(r){ acc += (parseFloat(r.vol)||0); accCell = acc; }   // ยอดสะสมถึงบรรทัดนี้
     body += `<tr>
-      <td class="n">${r?(i+1):''}</td>
-      <td class="inv">${r?he(r.inv):''}</td>
-      <td class="m">${r?he(r.bkg):''}</td>
-      <td class="v">${r?he(r.vol):''}</td>
+      <td class="n">${r?(i+1):NB}</td>
+      <td class="inv">${r?he(r.inv):NB}</td>
+      <td class="m">${r?he(r.bkg):NB}</td>
+      <td class="v">${r?he(r.vol):NB}</td>
       <td class="acc">${accCell}</td>
     </tr>`;
   }
