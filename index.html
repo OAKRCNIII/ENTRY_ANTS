@@ -3571,7 +3571,7 @@ function printVesselReport(){
   for(let i=0;i<ROWS;i++){
     const r = all[i];
     let accCell = NB;
-    if(r){ acc += (parseFloat(r.vol)||0); accCell = acc; }   // ยอดสะสมถึงบรรทัดนี้
+    if(r){ acc += (parseFloat(r.vol)||0); accCell = '('+acc+')'; }   // ยอดสะสมถึงบรรทัดนี้ (มีวงเล็บ)
     body += `<tr>
       <td class="n">${r?(i+1):NB}</td>
       <td class="inv">${r?he(r.inv):NB}</td>
