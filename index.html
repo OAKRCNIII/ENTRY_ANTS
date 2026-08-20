@@ -3396,7 +3396,8 @@ function confirmAddBkg(){
     if(old.bkg !== bkg){
       _queueBookingEvent({ booking_no:old.bkg, event_type:'rename', vol, detail:'เปลี่ยนเลขบุคกิ้ง '+old.bkg+' → '+bkg });
       _queueBookingEvent({ booking_no:bkg, event_type:'rename', vol, detail:'เปลี่ยนมาจาก '+old.bkg });
-    } else if(Number(old.vol||0)!==vol || (old.rem||'')!==rem){
+    }
+    if(Number(old.vol||0)!==vol || (old.rem||'')!==rem){   /* แยก if — แก้เลข+ตู้พร้อมกันได้ ลงครบทั้งคู่ */
       _queueBookingEvent({ booking_no:bkg, event_type:'edit', vol, detail:'แก้ไข'+(Number(old.vol||0)!==vol?(' ตู้ '+(old.vol||0)+'→'+vol):'')+((old.rem||'')!==rem?' · หมายเหตุ':'')+' ('+vessel+')' });
     }
   } else {
