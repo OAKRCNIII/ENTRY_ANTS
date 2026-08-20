@@ -3553,7 +3553,7 @@ function printVesselReport(){
   const he = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const all = loadInvDraft(idx).filter(r=>r&&r.inv).map(r=>({inv:r.inv, bkg:r.bkg||'', vol:r.vol||''}));   // เฉพาะอินวอยซ์ (ไม่เอาลอย)
   const totVol = all.reduce((s,r)=>s+(parseFloat(r.vol)||0),0);
-  const ROWS = Math.max(26, all.length+1);   // เติมแถวว่างให้เต็มฟอร์ม
+  const ROWS = Math.max(22, all.length);   // ~22 แถวเท่าฟอร์มตัวอย่าง (ช่องใหญ่)
   let body = '';
   for(let i=0;i<ROWS;i++){
     const r = all[i];
@@ -3580,8 +3580,8 @@ function printVesselReport(){
     .left .col:last-child{border-right:none;}
     .right{width:58%;border-left:2px solid #000;}
     table{width:100%;border-collapse:collapse;}
-    th,td{border:1px solid #000;padding:3px 6px;font-size:12.5px;height:26px;}
-    th{font-weight:800;font-size:12px;text-align:center;background:#fff;}
+    th,td{border:1px solid #000;padding:4px 7px;font-size:15px;height:32px;}
+    th{font-weight:800;font-size:13px;text-align:center;background:#fff;}
     td.n{text-align:center;width:34px;}
     td.v{text-align:center;width:48px;font-weight:700;}
     td.acc{width:52px;}
