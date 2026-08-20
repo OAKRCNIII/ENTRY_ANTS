@@ -3554,15 +3554,17 @@ function printVesselReport(){
   const all = loadInvDraft(idx).filter(r=>r&&r.inv).map(r=>({inv:r.inv, bkg:r.bkg||'', vol:r.vol||''}));   // เฉพาะอินวอยซ์ (ไม่เอาลอย)
   const totVol = all.reduce((s,r)=>s+(parseFloat(r.vol)||0),0);
   const ROWS = Math.max(20, all.length);   // 20 แถว (พอดี 1 หน้า A4 · ถ้า inv เกินก็ต่อหน้า)
-  let body = '';
+  let body = '', acc = 0;
   for(let i=0;i<ROWS;i++){
     const r = all[i];
+    let accCell = '';
+    if(r){ acc += (parseFloat(r.vol)||0); accCell = acc; }   // ยอดสะสมถึงบรรทัดนี้
     body += `<tr>
       <td class="n">${r?(i+1):''}</td>
-      <td class="inv">${r?he(r.inv):''}${r&&r.loy?'<span class="loy">ลอย</span>':''}</td>
+      <td class="inv">${r?he(r.inv):''}</td>
       <td class="m">${r?he(r.bkg):''}</td>
       <td class="v">${r?he(r.vol):''}</td>
-      <td class="acc"></td>
+      <td class="acc">${accCell}</td>
     </tr>`;
   }
   const now=new Date(), p=x=>String(x).padStart(2,'0');
@@ -3584,7 +3586,7 @@ function printVesselReport(){
     th{font-weight:800;font-size:13px;text-align:center;background:#fff;}
     td.n{text-align:center;width:34px;}
     td.v{text-align:center;width:48px;font-weight:700;}
-    td.acc{width:52px;}
+    td.acc{width:52px;text-align:center;font-weight:800;}
     td.m{font-family:'Sarabun',monospace;font-weight:600;letter-spacing:.03em;width:120px;}
     td.inv{position:relative;}
     td.inv .loy{position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:9px;color:#666;border:1px solid #999;border-radius:3px;padding:0 4px;}
