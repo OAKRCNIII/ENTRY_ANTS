@@ -480,6 +480,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
         <button class="vsl-cfg-btn" id="vslCfgBtn" onclick="saveVslCfg()">💾 บันทึก config เรือ</button>
         <button class="vsl-draft-btn" id="vslDraftBtn" onclick="saveAllDraft()">📋 บันทึก Draft ทั้ง 10 ลำ</button>
         <button type="button" onclick="openBkgHistory('')" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:700;color:#0f2a52;cursor:pointer;white-space:nowrap;">📜 ประวัติบุคกิ้ง</button>
+        <button type="button" onclick="printVesselReport()" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:700;color:#0f2a52;cursor:pointer;white-space:nowrap;">🖨️ พิมพ์รีพอร์ต</button>
       </div>
       <div class="form-msg" id="draftMsg" style="margin-bottom:10px;"></div>
 
@@ -3539,6 +3540,76 @@ async function searchBkgHistory(){
       </div>`;
     }).join('');
   }catch(e){ box.innerHTML = '<div style="color:#b91c1c;padding:10px;">ค้นหาไม่สำเร็จ: '+h(String(e.message||e))+'</div>'; }
+}
+
+// ── พิมพ์รีพอร์ตแผนจัดเรือ (A4 landscape · ตารางขวา + พื้นที่เขียนซ้าย) ──
+function printVesselReport(){
+  const idx = currentVslIdx;
+  const c = loadSlotConfigs()[idx] || {};
+  const vessel = (c.vessel || (document.getElementById('xls_vessel')||{}).value || '-');
+  const rawDate = (c.sailDate || (document.getElementById('xls_date')||{}).value || '');
+  const dm = String(rawDate).match(/(\d{4})-(\d{2})-(\d{2})/);
+  const date = dm ? (dm[3]+'/'+dm[2]+'/'+dm[1]) : (rawDate||'-');
+  const he = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const all = loadInvDraft(idx).filter(r=>r&&r.inv).map(r=>({inv:r.inv, bkg:r.bkg||'', vol:r.vol||''}));   // เฉพาะอินวอยซ์ (ไม่เอาลอย)
+  const totVol = all.reduce((s,r)=>s+(parseFloat(r.vol)||0),0);
+  const ROWS = Math.max(26, all.length+1);   // เติมแถวว่างให้เต็มฟอร์ม
+  let body = '';
+  for(let i=0;i<ROWS;i++){
+    const r = all[i];
+    body += `<tr>
+      <td class="n">${r?(i+1):''}</td>
+      <td class="inv">${r?he(r.inv):''}${r&&r.loy?'<span class="loy">ลอย</span>':''}</td>
+      <td class="m">${r?he(r.bkg):''}</td>
+      <td class="v">${r?he(r.vol):''}</td>
+      <td class="acc"></td>
+    </tr>`;
+  }
+  const now=new Date(), p=x=>String(x).padStart(2,'0');
+  const printedAt = p(now.getDate())+'/'+p(now.getMonth()+1)+'/'+now.getFullYear()+' '+p(now.getHours())+':'+p(now.getMinutes());
+  const html = `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>แผนจัดเรือ ${he(vessel)}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
+    @page{size:A4 landscape;margin:8mm 10mm;}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body{font-family:'Sarabun',sans-serif;color:#000;font-size:13px;}
+    .hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px;}
+    .hdr .v{font-size:20px;font-weight:800;}
+    .hdr .d{font-size:13px;font-weight:600;}
+    .wrap{display:flex;gap:0;border:2px solid #000;}
+    .left{width:42%;display:flex;}
+    .left .col{flex:1;border-right:1.5px solid #000;}
+    .left .col:last-child{border-right:none;}
+    .right{width:58%;border-left:2px solid #000;}
+    table{width:100%;border-collapse:collapse;}
+    th,td{border:1px solid #000;padding:3px 6px;font-size:12.5px;height:26px;}
+    th{font-weight:800;font-size:12px;text-align:center;background:#fff;}
+    td.n{text-align:center;width:34px;}
+    td.v{text-align:center;width:48px;font-weight:700;}
+    td.acc{width:52px;}
+    td.m{font-family:'Sarabun',monospace;font-weight:600;letter-spacing:.03em;width:120px;}
+    td.inv{position:relative;}
+    td.inv .loy{position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:9px;color:#666;border:1px solid #999;border-radius:3px;padding:0 4px;}
+    tfoot td{font-weight:800;text-align:center;}
+    .foot{margin-top:5px;font-size:10px;color:#666;text-align:right;}
+  </style></head><body>
+    <div class="hdr"><div class="v">🚢 ${he(vessel)}</div><div class="d">วันออกเรือ ${he(date)} · รวม ${totVol} ตู้</div></div>
+    <div class="wrap">
+      <div class="left"><div class="col"></div><div class="col"></div></div>
+      <div class="right">
+        <table>
+          <thead><tr><th>NO</th><th>INVOICE NUMBER</th><th>BKG NO</th><th>VOL</th><th>ACC</th></tr></thead>
+          <tbody>${body}</tbody>
+          <tfoot><tr><td colspan="3" style="text-align:right;">รวม</td><td class="v">${totVol}</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="foot">A.N.T.S. STAR TRANSIT · พิมพ์เมื่อ ${printedAt}</div>
+  </body></html>`;
+  const w = window.open('','_blank','width=1100,height=800');
+  if(!w){ alert('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+  w.onload = () => { try{ w.focus(); w.print(); }catch(e){} };
 }
 
 // ── Save vessel config (name + date) to localStorage ──
