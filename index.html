@@ -4065,7 +4065,12 @@ async function forceRefresh(){
     if(tab==='vessel'){
       /* ล้าง draft เรือเฉพาะตอนอยู่แท็บจัดเรือ (กันข้อมูลหายโดยไม่ตั้งใจ) */
       for(let i=0;i<SLOT_COUNT;i++){ localStorage.removeItem(getInvKey(i)); localStorage.removeItem(getLoyKey(i)); }
-      await loadVessels();
+      const pl = document.getElementById('vslPlanner');
+      const inPlanner = pl && pl.style.display!=='none';
+      await discoverVesselsFromPlan();
+      loadAllInvoices();
+      if(inPlanner){ renderExcelSheet(); }   /* อยู่หน้าจัดเรือลำไหน → รีเฟรชค้างลำนั้น */
+      else { showVslOverview(); }             /* อยู่หน้ารวมเรือ → รีเฟรชหน้ารวม */
     } else if(tab==='cal'){
       await initCal();
     } else if(tab==='dbvessel'){
