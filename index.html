@@ -3573,10 +3573,8 @@ function printVesselReport(){
     @page{size:A4 landscape;margin:8mm 10mm;}
     *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{font-family:'Sarabun',sans-serif;color:#000;font-size:13px;}
-    .hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px;}
-    .hdr .v{font-size:20px;font-weight:800;}
-    .hdr .d{font-size:13px;font-weight:600;}
     .wrap{display:flex;gap:0;border:2px solid #000;}
+    .right .vtitle{font-size:16px;font-weight:800;text-align:center;padding:6px 4px;border-bottom:2px solid #000;}
     .left{width:42%;display:flex;}
     .left .col{flex:1;border-right:1.5px solid #000;}
     .left .col:last-child{border-right:none;}
@@ -3593,14 +3591,13 @@ function printVesselReport(){
     tfoot td{font-weight:800;text-align:center;}
     .foot{margin-top:5px;font-size:10px;color:#666;text-align:right;}
   </style></head><body>
-    <div class="hdr"><div class="v">🚢 ${he(vessel)}</div><div class="d">วันออกเรือ ${he(date)} · รวม ${totVol} ตู้</div></div>
     <div class="wrap">
       <div class="left"><div class="col"></div><div class="col"></div></div>
       <div class="right">
+        <div class="vtitle">🚢 ${he(vessel)}　·　วันออกเรือ ${he(date)}</div>
         <table>
           <thead><tr><th>NO</th><th>INVOICE NUMBER</th><th>BKG NO</th><th>VOL</th><th>ACC</th></tr></thead>
           <tbody>${body}</tbody>
-          <tfoot><tr><td colspan="3" style="text-align:right;">รวม</td><td class="v">${totVol}</td><td></td></tr></tfoot>
         </table>
       </div>
     </div>
