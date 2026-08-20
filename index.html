@@ -468,8 +468,14 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
     ══════════════════════════════ -->
     <div class="tab-content" id="tab-vessel">
 
+      <!-- ═══ สรุปแพลนเรือรวม (overview) — โชว์ก่อนเข้าหน้าจัดเรือ ═══ -->
+      <div id="vslOverview"></div>
+
+      <!-- ═══ หน้าจัดเรือ (planner) — โผล่เมื่อกดเลือกเรือ ═══ -->
+      <div id="vslPlanner" style="display:none;">
       <!-- Vessel Navigator -->
       <div class="vsl-nav">
+        <button class="vsl-nav-btn" onclick="showVslOverview()" style="background:#0f2a52;color:#fff;border-color:#0f2a52;">← หน้ารวมเรือ</button>
         <button class="vsl-nav-btn" onclick="prevVsl()">← ก่อนหน้า</button>
         <div class="vsl-nav-center">
           <span class="vsl-nav-lbl">เรือ</span>
@@ -654,6 +660,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
         <div class="form-msg" id="xlsMsg" style="margin:0 16px 12px;"></div>
 
       </div><!-- /xls-sheet -->
+      </div><!-- /vslPlanner -->
     </div><!-- /tab-vessel -->
 
     <!-- ══════════════════════════════
@@ -3964,8 +3971,86 @@ function onInvSelect(rowIdx){
 async function loadVessels(){
   // Discovery ก่อน (ดึง vessel configs จาก vessel_plan) แล้วค่อย render
   await discoverVesselsFromPlan();
-  renderExcelSheet();
   loadAllInvoices();  // โหลด invoice dropdown ขนาน
+  showVslOverview();  // เข้าหน้ารวมเรือก่อนเสมอ
+}
+
+// ═══ หน้าสรุปแพลนเรือรวม (overview) ═══
+function showVslOverview(){
+  const pl = document.getElementById('vslPlanner'); if(pl) pl.style.display='none';
+  const ov = document.getElementById('vslOverview'); if(ov) ov.style.display='';
+  renderVslOverview();
+}
+function openVsl(idx){
+  currentVslIdx = idx;
+  const ov = document.getElementById('vslOverview'); if(ov) ov.style.display='none';
+  const pl = document.getElementById('vslPlanner'); if(pl) pl.style.display='';
+  renderExcelSheet();
+  loadAllInvoices();
+}
+// รวมยอดตู้แต่ละลำ (draft ใน localStorage ก่อน, ไม่มีค่อยดึง vessel_plan DB)
+async function computeVesselSummaries(){
+  const configs = loadSlotConfigs();
+  const slots = [];
+  for(let i=0;i<SLOT_COUNT;i++){
+    const c = configs[i]||{};
+    if(!c.vessel) continue;
+    slots.push({idx:i, vessel:c.vessel, date:(c.sailDate?String(c.sailDate).substring(0,10):'')});
+  }
+  return Promise.all(slots.map(async s=>{
+    const invDraft = loadInvDraft(s.idx).filter(r=>r&&r.inv);
+    const loyDraft = loadLoyRows(s.idx).filter(r=>r&&r.bkg);
+    let invRows = invDraft.map(r=>({vol:r.vol}));
+    let loyRows = loyDraft.map(r=>({vol:r.vol}));
+    if((invDraft.length===0 || loyDraft.length===0) && s.vessel && s.date){
+      try{
+        const { data } = await sb.from('vessel_plan')
+          .select('invoice_no,vol')
+          .eq('vessel_name', s.vessel).eq('sail_date', s.date).eq('sheet_name','WEB');
+        const all = data||[];
+        if(invDraft.length===0) invRows = all.filter(r=>!(r.invoice_no||'').toUpperCase().startsWith('LOY-')).map(r=>({vol:r.vol}));
+        if(loyDraft.length===0) loyRows = all.filter(r=> (r.invoice_no||'').toUpperCase().startsWith('LOY-')).map(r=>({vol:r.vol}));
+      }catch(e){}
+    }
+    const invSum = invRows.reduce((a,r)=>a+(parseFloat(r.vol)||0),0);
+    const loySum = loyRows.reduce((a,r)=>a+(parseFloat(r.vol)||0),0);
+    return {...s, invSum, loySum};
+  }));
+}
+async function renderVslOverview(){
+  const wrap = document.getElementById('vslOverview'); if(!wrap) return;
+  wrap.innerHTML = `<div style="text-align:center;padding:26px;color:#94a3b8;font-size:14px;">⏳ กำลังโหลดสรุปแพลนเรือ...</div>`;
+  let sums=[]; try{ sums = await computeVesselSummaries(); }catch(e){}
+  const fmtDate = d => { if(!d) return '-'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; };
+  let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;font-size:19px;color:#0f2a52;">🚢 สรุปแพลนเรือทั้งหมด${sums.length?` (${sums.length} ลำ)`:''}</h2>
+      <button onclick="loadVessels()" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-weight:700;cursor:pointer;color:#0f2a52;">🔄 รีเฟรช</button>
+    </div>`;
+  if(!sums.length){
+    html += `<div style="text-align:center;padding:34px;color:#94a3b8;font-size:14px;border:1px dashed #d7dee8;border-radius:12px;">ยังไม่มีเรือในแพลน — กด "🔄 รีเฟรช" หรือเพิ่มเรือก่อน</div>`;
+    wrap.innerHTML = html; return;
+  }
+  html += `<div style="display:flex;flex-direction:column;gap:10px;">`;
+  sums.forEach(s=>{
+    const total = s.invSum + s.loySum;
+    const loyBadge = s.loySum>0
+      ? `<span style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🟠 ลอย ${s.loySum} ตู้</span>`
+      : `<span style="background:#f0fdf4;color:#15803d;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">✅ จัดครบ</span>`;
+    html += `<button onclick="openVsl(${s.idx})" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 18px;border:1px solid #d7dee8;border-left:5px solid #16a34a;background:#fff;border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s;" onmouseover="this.style.background='#f0f6ff';this.style.borderLeftColor='#2563eb'" onmouseout="this.style.background='#fff';this.style.borderLeftColor='#16a34a'">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:16px;font-weight:800;color:#0f2a52;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h(s.vessel)}</div>
+          <div style="font-size:12.5px;color:#64748b;margin-top:3px;">📅 เรือวันที่ ${fmtDate(s.date)}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+          <span style="background:#eff6ff;color:#1d4ed8;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🔗 จับคู่แล้ว ${s.invSum} ตู้</span>
+          ${loyBadge}
+          <span style="background:#f1f5f9;color:#334155;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">Σ ${total} ตู้</span>
+          <span style="font-size:22px;color:#94a3b8;line-height:1;">›</span>
+        </div>
+      </button>`;
+  });
+  html += `</div>`;
+  wrap.innerHTML = html;
 }
 
 async function forceRefresh(){
