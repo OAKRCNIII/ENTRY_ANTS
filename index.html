@@ -904,7 +904,12 @@ async function doLogin(){
 function _applySession(u){
   const md = u.user_metadata || {};
   const uname = md.username || (u.email||'').split('@')[0].toUpperCase();
-  const role  = md.role_entry || md.role_dashboard || 'admin';   /* ไม่มี role → เห็นทุกแท็บ (ไม่บล็อกใคร) */
+  const role  = md.role_entry;   /* ต้องมี role_entry ถึงเข้า ENTRY ได้ (YAI/SUPAN = DASHBOARD อย่างเดียว) */
+  if(!role){
+    sb.auth.signOut().catch(()=>{});
+    const err=document.getElementById('loginErr'); if(err) err.textContent='🚫 บัญชีนี้ใช้ได้เฉพาะ DASHBOARD — ไม่มีสิทธิ์เข้า ENTRY';
+    return;
+  }
   USER_ROLE = role; LOGGED_USER = uname;
   if(_MAINT_ON && LOGGED_USER!=='OAK_THIRA'){ _logLogin(uname); _showMaintScreen(); return; }
   document.getElementById('loginScreen').style.display='none';
