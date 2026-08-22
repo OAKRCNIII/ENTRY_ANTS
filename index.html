@@ -3019,9 +3019,12 @@ function buildInvTableHtml(c, dbRows){
   for(let r=0;r<INV_ROWS;r++){
     const d = src[r] || {};
     const _ro = 'width:100%;box-sizing:border-box;border:none;background:transparent;cursor:default;padding:6px 8px;font-size:12.5px;color:#0f2a52;outline:none;';   /* โชว์อย่างเดียว แก้ไม่ได้ */
+    /* จ่ายค่า OCF แล้ว → ติด badge เขียว */
+    const _paidOCF = d.invoice_no && typeof paidOCFSet!=='undefined' && paidOCFSet.has(normInv(d.invoice_no));
+    const _ocfBadge = _paidOCF ? `<span title="จ่ายค่า OCF แล้ว" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:9.5px;font-weight:800;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:5px;padding:1px 6px;pointer-events:none;white-space:nowrap;">💰 OCF</span>` : '';
     html += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td><input id="xi_inv_${r}" type="text" value="${h(d.invoice_no||'')}" readonly tabindex="-1" style="${_ro}"></td>
+      <td style="position:relative;"><input id="xi_inv_${r}" type="text" value="${h(d.invoice_no||'')}" readonly tabindex="-1" style="${_ro}${_paidOCF?'padding-right:56px;':''}">${_ocfBadge}</td>
       <td><input id="xi_des_${r}" type="text" value="${h(d.destination||'')}" readonly tabindex="-1" style="${_ro}color:#334155;"></td>
       <td><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}"></td>
       <td><input id="xi_vol_${r}" type="text" value="${d.container_count||''}" readonly tabindex="-1" style="${_ro}text-align:center;"></td>
