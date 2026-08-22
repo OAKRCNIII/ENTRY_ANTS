@@ -4087,6 +4087,7 @@ async function forceRefresh(){
       const pl = document.getElementById('vslPlanner');
       const inPlanner = pl && pl.style.display!=='none';
       await discoverVesselsFromPlan();
+      await loadPendingData();   /* โหลด paidOCFSet ใหม่ → badge 💰 OCF อัปเดต */
       loadAllInvoices();
       if(inPlanner){ renderExcelSheet(); }   /* อยู่หน้าจัดเรือลำไหน → รีเฟรชค้างลำนั้น */
       else { showVslOverview(); }             /* อยู่หน้ารวมเรือ → รีเฟรชหน้ารวม */
