@@ -2580,13 +2580,25 @@ let plannedInvSet = new Set();   // invoice_no ที่แพลนไปแล
 
 // ── Load pending data (vessels + paid sets) ──
 async function loadPendingData(){
-  const [{ data: vslData }, { data: paidData }, { data: manualPaidData }] = await Promise.all([
+  const [{ data: vslData }, { data: paidData }, { data: manualPaidData }, { data: planData }] = await Promise.all([
     sb.from('vessels').select('invoice_no,vessel_name,sail_date,booking_no,container_count')
       .gte('sail_date','2026-04-01').order('sail_date',{ascending:false}),
     sb.from('su_statement').select('type,description'),
-    sb.from('manual_paid').select('invoice_no')
+    sb.from('manual_paid').select('invoice_no'),
+    /* draft จัดเรือ (sheet WEB) — เอาเฉพาะที่แพลนขึ้นเรือแล้ว + มีบุคกิ้งแล้ว (ยังไม่ ADD TO DATABASE ก็เห็น) */
+    sb.from('vessel_plan').select('invoice_no,vessel_name,sail_date,bkg_no,vol').eq('sheet_name','WEB')
   ]);
-  allVessels = vslData || [];
+  /* รวม vessels (finalized) + draft plan ที่มีบุคกิ้ง — dedupe ด้วย invoice_no (vessels มาก่อน) */
+  const _base = vslData || [];
+  const _seen = new Set(_base.map(r=>normInv(r.invoice_no)));
+  const _planRows = (planData||[])
+    .filter(r=> r.bkg_no && String(r.bkg_no).trim() && r.invoice_no
+             && !String(r.invoice_no).toUpperCase().startsWith('LOY-')
+             && r.vessel_name && r.sail_date)
+    .map(r=>({invoice_no:r.invoice_no, vessel_name:r.vessel_name, sail_date:String(r.sail_date).substring(0,10), booking_no:r.bkg_no, container_count:r.vol}));
+  const _merged = [..._base];
+  _planRows.forEach(r=>{ const k=normInv(r.invoice_no); if(!_seen.has(k)){ _seen.add(k); _merged.push(r); } });
+  allVessels = _merged;
   paidOCFSet = new Set((paidData||[]).filter(r=>r.type==='OCF').map(r=>normInv(r.description)));
   paidTLXSet = new Set((paidData||[]).filter(r=>r.type==='TLX').map(r=>normInv((r.description||'').replace(/^TLX-/i,''))));
   // ติ๊ก manual paid ใน Dashboard → ซ่อนออกจาก OCF dropdown ด้วย
