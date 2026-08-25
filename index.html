@@ -3100,6 +3100,27 @@ async function renderExcelSheet(){
   const invDb = all.filter(r => !(r.invoice_no||'').toUpperCase().startsWith('LOY-'));
   const loyDb = all.filter(r =>  (r.invoice_no||'').toUpperCase().startsWith('LOY-'));
 
+  // ── ไม่มี WEB draft เลย → ดึงอินวอยซ์เดิมจาก vessels (เรือที่ ADD TO DATABASE แล้ว) มา re-plan ──
+  if(all.length === 0){
+    const { data: vdata } = await sb.from('vessels')
+      .select('invoice_no,destination,booking_no,container_count')
+      .eq('vessel_name', c.vessel).eq('sail_date', sailDateNorm)
+      .order('id', {ascending:true});
+    if(vdata && vdata.length){
+      const vInv = vdata.filter(r=>!(r.invoice_no||'').toUpperCase().startsWith('LOY-'));
+      const vLoy = vdata.filter(r=> (r.invoice_no||'').toUpperCase().startsWith('LOY-'));
+      const shippedRows = vInv.map(r=>({invoice_no:r.invoice_no,destination:r.destination,booking_no:r.booking_no,container_count:r.container_count}));
+      const loyMapped   = vLoy.map(r=>({bkg:r.booking_no||'', vol:r.container_count||0, rem:''}));
+      document.getElementById('xlsInvBody').innerHTML = buildInvTableHtml(c, shippedRows);
+      document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loyMapped.length?loyMapped:loadLoyRows(idx));
+      saveInvDraft();                                  // เก็บลง localStorage → กัน discover/saveAllDraft ลบ
+      if(loyMapped.length) saveLoyRows(idx, loyMapped);
+      calcXlsTotals();
+      showMsg('xlsMsg','📥 ดึงอินวอยซ์เดิมจาก DATABASE มาแล้ว — เพิ่มตัวที่ตกหล่น แล้วกด ADD TO DATABASE ใหม่','success');
+      return;
+    }
+  }
+
   const dbRows = invDb.map(r => ({
     invoice_no:      r.invoice_no,
     destination:     r.destination,
@@ -3164,39 +3185,44 @@ async function discoverVesselsFromPlan(){
   if(!unique.length) return false;
 
   const configs = loadSlotConfigs();
+  const newConfigs = Array(SLOT_COUNT).fill(null).map(() => ({}));
+  const placedKeys = new Set();
   let changed = false;
 
-  // ล้าง draft + config ของ slot ที่เรือ ADD TO DATABASE ไปแล้ว
+  /* 1) คง slot เดิมไว้ — ล้างเฉพาะเรือที่ ADD TO DATABASE แล้ว + ไม่มี draft + ไม่ใช่เรือที่ผู้ใช้ตั้งเอง (manual)
+        → เรือใหม่ที่เพิ่งเพิ่ม และเรือที่ re-plan (ชื่อซ้ำใน DATABASE) จะไม่โดนลบอัตโนมัติ */
   configs.forEach((c, i) => {
-    if(!c || !c.vessel || !c.sailDate) return;
-    const k = c.vessel + '|' + String(c.sailDate||'').substring(0,10);
-    if(shippedSet.has(k)){
+    if(i >= SLOT_COUNT || !c || !c.vessel || !c.sailDate) return;
+    const d = String(c.sailDate).substring(0,10);
+    const k = c.vessel + '|' + d;
+    const hasDraft = loadInvDraft(i).some(r => r.inv) || loadLoyRows(i).some(r => r.bkg);
+    if(shippedSet.has(k) && !hasDraft && !c.manual){
       localStorage.removeItem(getInvKey(i));
       localStorage.removeItem(getLoyKey(i));
-      configs[i] = {};
+      changed = true;
+      return;
+    }
+    newConfigs[i] = { vessel: c.vessel, sailDate: d };
+    if(c.manual) newConfigs[i].manual = true;
+    placedKeys.add(k);
+  });
+
+  /* 2) เติมเรือจาก DB (vessel_plan ที่มีข้อมูล ยังไม่ ship) ที่ยังไม่มีใน slot → ลง slot ว่างถัดไป */
+  unique.forEach(v => {
+    const k = v.vessel + '|' + v.sailDate;
+    if(placedKeys.has(k)) return;
+    let idx = -1;
+    for(let i=0;i<SLOT_COUNT;i++){
+      if(!newConfigs[i].vessel && !loadInvDraft(i).some(r=>r.inv)){ idx=i; break; }
+    }
+    if(idx >= 0){
+      newConfigs[idx] = { vessel: v.vessel, sailDate: v.sailDate };
+      placedKeys.add(k);
       changed = true;
     }
   });
 
-  // รีเซ็ต slot ทั้งหมดก่อน แล้วใส่ใหม่จาก DB (เพื่อลบเรือที่ไม่มีข้อมูลออก)
-  const newConfigs = Array(SLOT_COUNT).fill(null).map(() => ({}));
-  unique.slice(0, SLOT_COUNT).forEach((v, i) => {
-    // ถ้า slot เดิมมี localStorage draft → คงชื่อเรือของ slot นั้นไว้ (ผู้ใช้แก้ไขเอง)
-    const old = configs[i] || {};
-    const hasDraft = loadInvDraft(i).some(r => r.inv);
-    if(hasDraft && old.vessel && !shippedSet.has(old.vessel+'|'+String(old.sailDate||'').substring(0,10))){
-      newConfigs[i] = old;  // คง config เดิมของ slot ที่มี draft (ยังไม่ ship)
-    } else {
-      newConfigs[i] = { vessel: v.vessel, sailDate: v.sailDate };
-      if(old.vessel !== v.vessel || old.sailDate !== v.sailDate) changed = true;
-    }
-  });
-
-  if(changed || configs.length !== newConfigs.length){
-    console.log('[discover] configs updated → save');
-    saveSlotConfigs(newConfigs);
-    changed = true;
-  }
+  saveSlotConfigs(newConfigs);
   return changed;
 }
 
@@ -3653,7 +3679,7 @@ async function saveVslCfg(){
   const oldVessel   = configs[idx].vessel   || '';
   const oldSailDate = configs[idx].sailDate || '';
 
-  configs[idx] = { ...configs[idx], vessel, sailDate };
+  configs[idx] = { ...configs[idx], vessel, sailDate, manual:true };   /* manual=ผู้ใช้ตั้งเอง → discover ห้ามลบ (กัน re-plan เรือที่ ADD DATABASE แล้วโดนลบ) */
   saveSlotConfigs(configs);
 
   const btn = document.getElementById('vslCfgBtn');
@@ -4007,6 +4033,15 @@ function openVsl(idx){
   renderExcelSheet();
   loadAllInvoices();
 }
+// เพิ่มเรือใหม่ → เปิด slot ว่างในหน้าจัดเรือ (พิมพ์ชื่อเรือ+วันที่ แล้วกดบันทึก config)
+function addNewVessel(){
+  const configs = loadSlotConfigs();
+  let idx = -1;
+  for(let i=0;i<SLOT_COUNT;i++){ const c=configs[i]||{}; if(!c.vessel && !loadInvDraft(i).some(r=>r.inv)){ idx=i; break; } }
+  if(idx<0){ alert('⚠️ ครบ '+SLOT_COUNT+' ลำแล้ว — ADD TO DATABASE เรือที่จัดเสร็จก่อน'); return; }
+  openVsl(idx);
+  setTimeout(()=>{ const el=document.getElementById('xls_vessel'); if(el){ el.focus(); } }, 130);
+}
 // รวมยอดตู้แต่ละลำ (draft ใน localStorage ก่อน, ไม่มีค่อยดึง vessel_plan DB)
 async function computeVesselSummaries(){
   const configs = loadSlotConfigs();
@@ -4043,7 +4078,10 @@ async function renderVslOverview(){
   const fmtDate = d => { if(!d) return '-'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; };
   let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;font-size:19px;color:#0f2a52;">🚢 สรุปแพลนเรือทั้งหมด${sums.length?` (${sums.length} ลำ)`:''}</h2>
-      <button onclick="loadVessels()" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-weight:700;cursor:pointer;color:#0f2a52;">🔄 รีเฟรช</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="addNewVessel()" style="padding:7px 14px;border:none;background:#16a34a;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;">➕ เพิ่มเรือใหม่</button>
+        <button onclick="loadVessels()" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-weight:700;cursor:pointer;color:#0f2a52;">🔄 รีเฟรช</button>
+      </div>
     </div>`;
   if(!sums.length){
     html += `<div style="text-align:center;padding:34px;color:#94a3b8;font-size:14px;border:1px dashed #d7dee8;border-radius:12px;">ยังไม่มีเรือในแพลน — กด "🔄 รีเฟรช" หรือเพิ่มเรือก่อน</div>`;
