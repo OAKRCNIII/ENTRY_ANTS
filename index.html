@@ -2994,6 +2994,11 @@ function getInvKey(i){ return SLOTS_KEY + '_inv_' + i; }
 function loadInvDraft(i){
   try { return JSON.parse(localStorage.getItem(getInvKey(i))) || []; } catch{ return []; }
 }
+/* จำว่าอินวอยซ์ไหน "ดึงมาจาก DATABASE" (ADD แล้ว) ต่อ slot — ใช้แยกสีในตาราง re-plan */
+function getDbSetKey(i){ return SLOTS_KEY + '_db_' + i; }
+function loadDbSet(i){ try{ return new Set(JSON.parse(localStorage.getItem(getDbSetKey(i)))||[]); }catch{ return new Set(); } }
+function saveDbSet(i, set){ localStorage.setItem(getDbSetKey(i), JSON.stringify([...set])); }
+function clearDbSet(i){ localStorage.removeItem(getDbSetKey(i)); }
 function saveInvDraft(){
   const idx  = currentVslIdx;
   const rows = [];
@@ -3015,6 +3020,8 @@ function buildInvTableHtml(c, dbRows){
   const hasDraft = draft.some(r => r.inv);
   const src = hasDraft ? draft.map(r=>({invoice_no:r.inv,destination:r.des,booking_no:r.bkg,container_count:r.vol})) : dbRows;
 
+  const _dbSet = loadDbSet(currentVslIdx);   /* re-plan: อินวอยซ์ที่ดึงมาจาก DATABASE */
+  const _replan = _dbSet.size > 0;
   let html = '';
   for(let r=0;r<INV_ROWS;r++){
     const d = src[r] || {};
@@ -3022,9 +3029,19 @@ function buildInvTableHtml(c, dbRows){
     /* จ่ายค่า OCF แล้ว → ติด badge เขียว */
     const _paidOCF = d.invoice_no && typeof paidOCFSet!=='undefined' && paidOCFSet.has(normInv(d.invoice_no));
     const _ocfBadge = _paidOCF ? `<span title="จ่ายค่า OCF แล้ว" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:9.5px;font-weight:800;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:5px;padding:1px 6px;pointer-events:none;white-space:nowrap;">💰 OCF</span>` : '';
+    /* re-plan: แยกชุด DB (เขียว) vs ยังไม่ ADD (ส้ม) */
+    const _inDb  = _replan && d.invoice_no && _dbSet.has(normInv(d.invoice_no));
+    const _isNew = _replan && d.invoice_no && !_inDb;
+    const _stBadge = _inDb
+      ? `<span title="อยู่ใน DATABASE แล้ว" style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:8px;font-weight:800;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:4px;padding:0 4px;pointer-events:none;">DB</span>`
+      : _isNew
+      ? `<span title="ยังไม่ ADD DATABASE" style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:8px;font-weight:800;color:#c2410c;background:#ffedd5;border:1px solid #fdba74;border-radius:4px;padding:0 4px;pointer-events:none;">ใหม่</span>`
+      : '';
+    const _invBorder = _inDb ? 'border-left:3px solid #16a34a;' : _isNew ? 'border-left:3px solid #f97316;' : '';
+    const _invPadL = (_inDb||_isNew) ? 'padding-left:34px;' : '';
     html += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td style="position:relative;"><input id="xi_inv_${r}" type="text" value="${h(d.invoice_no||'')}" readonly tabindex="-1" style="${_ro}${_paidOCF?'padding-right:56px;':''}">${_ocfBadge}</td>
+      <td style="position:relative;${_invBorder}"><input id="xi_inv_${r}" type="text" value="${h(d.invoice_no||'')}" readonly tabindex="-1" style="${_ro}${_invPadL}${_paidOCF?'padding-right:56px;':''}">${_stBadge}${_ocfBadge}</td>
       <td><input id="xi_des_${r}" type="text" value="${h(d.destination||'')}" readonly tabindex="-1" style="${_ro}color:#334155;"></td>
       <td><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}"></td>
       <td><input id="xi_vol_${r}" type="text" value="${d.container_count||''}" readonly tabindex="-1" style="${_ro}text-align:center;"></td>
@@ -3100,21 +3117,26 @@ async function renderExcelSheet(){
   const invDb = all.filter(r => !(r.invoice_no||'').toUpperCase().startsWith('LOY-'));
   const loyDb = all.filter(r =>  (r.invoice_no||'').toUpperCase().startsWith('LOY-'));
 
-  // ── ไม่มี WEB draft เลย → ดึงอินวอยซ์เดิมจาก vessels (เรือที่ ADD TO DATABASE แล้ว) มา re-plan ──
-  if(all.length === 0){
+  // ── ไม่มีอินวอยซ์จริงใน WEB (invDb ว่าง) → ดึงอินวอยซ์เดิมจาก vessels (เรือที่ ADD TO DATABASE แล้ว) มา re-plan ──
+  if(invDb.length === 0){
     const { data: vdata } = await sb.from('vessels')
       .select('invoice_no,destination,booking_no,container_count')
       .eq('vessel_name', c.vessel).eq('sail_date', sailDateNorm)
       .order('id', {ascending:true});
     if(vdata && vdata.length){
-      const vInv = vdata.filter(r=>!(r.invoice_no||'').toUpperCase().startsWith('LOY-'));
-      const vLoy = vdata.filter(r=> (r.invoice_no||'').toUpperCase().startsWith('LOY-'));
-      const shippedRows = vInv.map(r=>({invoice_no:r.invoice_no,destination:r.destination,booking_no:r.booking_no,container_count:r.container_count}));
-      const loyMapped   = vLoy.map(r=>({bkg:r.booking_no||'', vol:r.container_count||0, rem:''}));
+      const shippedRows = vdata.filter(r=>!(r.invoice_no||'').toUpperCase().startsWith('LOY-'))
+        .map(r=>({invoice_no:r.invoice_no,destination:r.destination,booking_no:r.booking_no,container_count:r.container_count}));
+      saveDbSet(idx, new Set(shippedRows.map(r=>normInv(r.invoice_no))));   // จำว่าชุดนี้มาจาก DATABASE
       document.getElementById('xlsInvBody').innerHTML = buildInvTableHtml(c, shippedRows);
-      document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loyMapped.length?loyMapped:loadLoyRows(idx));
-      saveInvDraft();                                  // เก็บลง localStorage → กัน discover/saveAllDraft ลบ
-      if(loyMapped.length) saveLoyRows(idx, loyMapped);
+      saveInvDraft();                                  // เก็บ INV ลง localStorage → กัน discover/saveAllDraft ลบ
+      // LOY: คงของที่ user ใส่ไว้ก่อน; ไม่มีค่อยใช้ WEB loy; ไม่มีอีกค่อยดึง shipped loy
+      const curLoy = loadLoyRows(idx);
+      let loyShow;
+      if(curLoy.some(r=>r.bkg))      loyShow = curLoy;
+      else if(loyDb.length)          loyShow = loyDb.map(r=>({bkg:r.bkg_no||'',vol:r.vol||0,rem:r.notes||''}));
+      else                           loyShow = vdata.filter(r=>(r.invoice_no||'').toUpperCase().startsWith('LOY-')).map(r=>({bkg:r.booking_no||'',vol:r.container_count||0,rem:''}));
+      document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loyShow);
+      if(!curLoy.some(r=>r.bkg) && loyShow.length) saveLoyRows(idx, loyShow);
       calcXlsTotals();
       showMsg('xlsMsg','📥 ดึงอินวอยซ์เดิมจาก DATABASE มาแล้ว — เพิ่มตัวที่ตกหล่น แล้วกด ADD TO DATABASE ใหม่','success');
       return;
@@ -3705,6 +3727,7 @@ async function saveVslCfg(){
     // 3) ล้าง draft เก่าทิ้ง — ป้องกัน draft เรือเก่าถูกนำไปใส่เรือใหม่ (BUG FIX)
     localStorage.removeItem(getInvKey(idx));
     localStorage.removeItem(getLoyKey(idx));
+    clearDbSet(idx);
 
     // 4) migrate Supabase rows เก่าไปวันที่/ชื่อใหม่ (เสมอ — ไม่ใช้ draft เก่า)
     if(oldRows && oldRows.length){
@@ -3716,6 +3739,9 @@ async function saveVslCfg(){
       await sb.from('vessel_plan').insert(payload);
     }
   }
+
+  // re-render ตาราง — เผื่อเป็นเรือที่ ADD DATABASE แล้ว จะได้ดึงอินวอยซ์เดิมจาก vessels กลับมา
+  await renderExcelSheet();
 
   btn.textContent = '✅ บันทึกแล้ว'; btn.style.background = '#0f2a52'; btn.disabled = false;
   setTimeout(()=>{ btn.textContent = '💾 บันทึก config เรือ'; btn.style.background = ''; }, 1800);
@@ -3785,9 +3811,10 @@ async function xlsAddToDb(){
   await sb.from('vessel_plan').delete()
     .eq('sheet_name','WEB').eq('vessel_name', vessel).eq('sail_date', date);
 
-  // ── ล้าง draft + config ของ slot ปัจจุบันทันที ──
+  // ── ล้าง draft + config + db-set ของ slot ปัจจุบันทันที ──
   localStorage.removeItem(getInvKey(currentVslIdx));
   localStorage.removeItem(getLoyKey(currentVslIdx));
+  clearDbSet(currentVslIdx);
 
   // ── Queue shift: ลบ slot ปัจจุบัน แล้วเลื่อนทุก slot ขึ้น 1 ──
   const configs = loadSlotConfigs();
@@ -3795,7 +3822,7 @@ async function xlsAddToDb(){
   configs.push({});                   // เติม slot ว่างท้ายสุด
   saveSlotConfigs(configs);
 
-  // เลื่อน inv draft + ลอย draft ด้วย
+  // เลื่อน inv draft + ลอย draft + db-set ด้วย
   for(let i = currentVslIdx; i < SLOT_COUNT - 1; i++){
     const nextInv = localStorage.getItem(getInvKey(i + 1));
     if(nextInv) localStorage.setItem(getInvKey(i), nextInv);
@@ -3804,9 +3831,14 @@ async function xlsAddToDb(){
     const nextLoy = localStorage.getItem(getLoyKey(i + 1));
     if(nextLoy) localStorage.setItem(getLoyKey(i), nextLoy);
     else        localStorage.removeItem(getLoyKey(i));
+
+    const nextDb = localStorage.getItem(getDbSetKey(i + 1));
+    if(nextDb) localStorage.setItem(getDbSetKey(i), nextDb);
+    else       localStorage.removeItem(getDbSetKey(i));
   }
   localStorage.removeItem(getInvKey(SLOT_COUNT - 1));
   localStorage.removeItem(getLoyKey(SLOT_COUNT - 1));
+  clearDbSet(SLOT_COUNT - 1);
 
   // ถ้า slot ปัจจุบัน > 0 ให้กลับไป slot 0 เสมอ (ลำต่อไป)
   if(currentVslIdx > 0) currentVslIdx = 0;
@@ -3842,6 +3874,7 @@ function clearXlsSheet(){
     });
   }
   localStorage.removeItem(getInvKey(currentVslIdx));
+  clearDbSet(currentVslIdx);
   saveLoyDraft();
   calcXlsTotals();
 }
@@ -4075,6 +4108,7 @@ async function renderVslOverview(){
   const wrap = document.getElementById('vslOverview'); if(!wrap) return;
   wrap.innerHTML = `<div style="text-align:center;padding:26px;color:#94a3b8;font-size:14px;">⏳ กำลังโหลดสรุปแพลนเรือ...</div>`;
   let sums=[]; try{ sums = await computeVesselSummaries(); }catch(e){}
+  sums.sort((a,b)=> String(a.date||'9999-99-99').localeCompare(String(b.date||'9999-99-99')));   /* วันเรือใกล้สุดขึ้นบนสุด */
   const fmtDate = d => { if(!d) return '-'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; };
   let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;font-size:19px;color:#0f2a52;">🚢 สรุปแพลนเรือทั้งหมด${sums.length?` (${sums.length} ลำ)`:''}</h2>
