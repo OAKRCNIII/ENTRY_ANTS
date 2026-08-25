@@ -4107,14 +4107,44 @@ function openVsl(idx){
   renderExcelSheet();
   loadAllInvoices();
 }
-// เพิ่มเรือใหม่ → เปิด slot ว่างในหน้าจัดเรือ (พิมพ์ชื่อเรือ+วันที่ แล้วกดบันทึก config)
+// เพิ่มเรือใหม่ → หน้าต่างกรอกชื่อเรือ + วันที่ → บันทึก = เท่ากับบันทึก config เรือ
 function addNewVessel(){
   const configs = loadSlotConfigs();
   let idx = -1;
   for(let i=0;i<SLOT_COUNT;i++){ const c=configs[i]||{}; if(!c.vessel && !loadInvDraft(i).some(r=>r.inv)){ idx=i; break; } }
   if(idx<0){ alert('⚠️ ครบ '+SLOT_COUNT+' ลำแล้ว — ADD TO DATABASE เรือที่จัดเสร็จก่อน'); return; }
-  openVsl(idx);
-  setTimeout(()=>{ const el=document.getElementById('xls_vessel'); if(el){ el.focus(); } }, 130);
+  let modal=document.getElementById('addVslModal');
+  if(!modal){ modal=document.createElement('div'); modal.id='addVslModal'; modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;'; document.body.appendChild(modal); }
+  modal.innerHTML=`<div style="background:#fff;border-radius:16px;padding:22px;width:min(460px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.35);">
+    <div style="font-size:17px;font-weight:800;color:#0f2a52;margin-bottom:16px;">➕ เพิ่มเรือใหม่</div>
+    <label style="font-size:12.5px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">ชื่อเรือ</label>
+    <input id="addVslName" autocomplete="off" placeholder="เช่น OOCL AUSTRALIA 279N" oninput="this.value=this.value.toUpperCase()" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;margin-bottom:14px;color:#0f2a52;">
+    <label style="font-size:12.5px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">วันออกเรือ</label>
+    <input id="addVslDate" type="date" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;margin-bottom:8px;color:#0f2a52;">
+    <div id="addVslErr" style="font-size:12px;color:#dc2626;min-height:16px;margin-bottom:8px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('addVslModal').remove()" style="flex:1;padding:10px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;font-weight:700;cursor:pointer;color:#475569;">ยกเลิก</button>
+      <button onclick="confirmAddVessel(${idx})" style="flex:1;padding:10px;border:none;background:#16a34a;color:#fff;border-radius:10px;font-weight:800;cursor:pointer;">💾 บันทึก</button>
+    </div>
+  </div>`;
+  modal.style.display='flex';
+  setTimeout(()=>{ const el=document.getElementById('addVslName'); if(el) el.focus(); }, 80);
+}
+function confirmAddVessel(slotIdx){
+  const modal=document.getElementById('addVslModal'); if(!modal)return;
+  const vessel=(document.getElementById('addVslName').value||'').trim();
+  const date  =(document.getElementById('addVslDate').value||'').trim();
+  const err=document.getElementById('addVslErr');
+  if(!vessel){ err.textContent='⚠️ กรอกชื่อเรือก่อน'; return; }
+  if(!date){   err.textContent='⚠️ เลือกวันออกเรือก่อน'; return; }
+  const configs=loadSlotConfigs();
+  while(configs.length<=slotIdx) configs.push({});
+  configs[slotIdx]={vessel, sailDate:date, manual:true};   /* = บันทึก config เรือ */
+  saveSlotConfigs(configs);
+  modal.remove();
+  sortSlotsByDate();                       // เรียงตามวันเรือ (ใกล้สุด = ลำที่ 1)
+  const ni=findSlotIndex(vessel,date);
+  openVsl(ni>=0?ni:slotIdx);                // เข้าหน้าจัดเรือลำนี้ (fallback ดึง INV ถ้าชื่อ+วันตรงเรือใน DB)
 }
 // เรียกเรือเก่า (ADD DATABASE แล้ว) → ดรอปดาวน์เลือก → ดึงอินวอยซ์เดิมมาแก้/เพิ่ม
 async function recallOldVessel(){
