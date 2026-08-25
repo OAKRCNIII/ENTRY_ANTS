@@ -4137,22 +4137,34 @@ function showRecallModal(list, slotIdx){
   let modal=document.getElementById('recallVslModal');
   if(!modal){ modal=document.createElement('div'); modal.id='recallVslModal'; modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;'; document.body.appendChild(modal); }
   const fmt=d=>{const p=String(d).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d;};
-  const opts=list.map((g,i)=>`<option value="${i}">${h(g.vessel)} — ${fmt(g.date)} (${g.inv} INV · ${g.vol} ตู้)</option>`).join('');
+  const label=g=>`${g.vessel} — ${fmt(g.date)} (${g.inv} INV · ${g.vol} ตู้)`;
+  const opts=list.map(g=>`<option value="${h(label(g))}"></option>`).join('');
   modal.innerHTML=`<div style="background:#fff;border-radius:16px;padding:22px;width:min(480px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.35);">
     <div style="font-size:17px;font-weight:800;color:#0f2a52;margin-bottom:6px;">📼 เรียกเรือเก่าจาก DATABASE</div>
-    <div style="font-size:12.5px;color:#64748b;margin-bottom:14px;">เลือกเรือที่ ADD แล้ว → ดึงอินวอยซ์เดิมมาแก้/เพิ่มตัวที่ตกหล่น</div>
-    <select id="recallSel" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;margin-bottom:16px;background:#fff;color:#0f2a52;">${opts}</select>
+    <div style="font-size:12.5px;color:#64748b;margin-bottom:14px;">พิมพ์ค้นหา หรือเลือกเรือที่ ADD แล้ว → ดึงอินวอยซ์เดิมมาแก้/เพิ่มตัวที่ตกหล่น</div>
+    <input id="recallInp" list="recallList" autocomplete="off" placeholder="— พิมพ์ค้นหา หรือเลือกเรือ (${list.length} ลำ) —" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;margin-bottom:16px;background:#fff;color:#0f2a52;">
+    <datalist id="recallList">${opts}</datalist>
     <div style="display:flex;gap:8px;">
       <button onclick="document.getElementById('recallVslModal').remove()" style="flex:1;padding:10px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;font-weight:700;cursor:pointer;color:#475569;">ยกเลิก</button>
       <button onclick="confirmRecall(${slotIdx})" style="flex:1;padding:10px;border:none;background:#0f2a52;color:#fff;border-radius:10px;font-weight:800;cursor:pointer;">📥 เรียกเรือนี้</button>
     </div>
   </div>`;
   modal._list=list;
+  modal._label=label;
   modal.style.display='flex';
+  setTimeout(()=>{ const el=document.getElementById('recallInp'); if(el) el.focus(); }, 80);
 }
 function confirmRecall(slotIdx){
   const modal=document.getElementById('recallVslModal'); if(!modal)return;
-  const sel=document.getElementById('recallSel'); const g=modal._list[parseInt(sel.value)]; if(!g){ modal.remove(); return; }
+  const inp=document.getElementById('recallInp'); const val=(inp?inp.value:'').trim();
+  const list=modal._list||[]; const label=modal._label;
+  let g = list.find(x=>label(x)===val);
+  if(!g){ /* พิมพ์ไม่ครบ → จับคู่ด้วยชื่อเรือแบบหลวม */
+    const v=val.toUpperCase();
+    const cands=list.filter(x=>label(x).toUpperCase().includes(v) || x.vessel.toUpperCase().includes(v));
+    if(cands.length===1) g=cands[0];
+  }
+  if(!g){ if(inp){ inp.style.borderColor='#dc2626'; inp.placeholder='⚠️ ไม่พบเรือนี้ — เลือกจากรายการ'; } return; }
   const configs=loadSlotConfigs();
   while(configs.length<=slotIdx) configs.push({});
   configs[slotIdx]={vessel:g.vessel, sailDate:g.date, manual:true};   /* manual → discover ไม่ลบ */
