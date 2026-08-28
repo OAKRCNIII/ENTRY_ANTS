@@ -1000,6 +1000,7 @@ function switchTab(name, el){
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
+  if(name === 'vessel') reloadVesselFresh();   /* ดึงสดจาก DB ทุกครั้งที่เปิด — กันโหลด draft เก่าแล้วเซฟทับ */
   if(name === 'dbvessel') loadDbVessel();
   if(name === 'cal') initCal();
   if(name === 'docs') initDocs();
@@ -4092,6 +4093,11 @@ async function loadVessels(){
   sortSlotsByDate();  // เรียง slot ตามวันเรือ (ใกล้สุด = ลำที่ 1)
   loadAllInvoices();  // โหลด invoice dropdown ขนาน
   showVslOverview();  // เข้าหน้ารวมเรือก่อนเสมอ
+}
+/* เปิดหน้าจัดเรือทุกครั้ง → ล้าง draft ในเครื่อง แล้วดึงสดจาก DB (กันโหลดของเก่าแล้วเซฟทับงานใหม่) */
+async function reloadVesselFresh(){
+  for(let i=0;i<SLOT_COUNT;i++){ localStorage.removeItem(getInvKey(i)); localStorage.removeItem(getLoyKey(i)); localStorage.removeItem(getDbSetKey(i)); }
+  try{ await loadVessels(); }catch(e){ console.warn('reloadVesselFresh:', e); }
 }
 
 // ═══ หน้าสรุปแพลนเรือรวม (overview) ═══
