@@ -3254,9 +3254,11 @@ async function discoverVesselsFromPlan(){
     const d = String(c.sailDate).substring(0,10);
     const k = c.vessel + '|' + d;
     const hasDraft = loadInvDraft(i).some(r => r.inv) || loadLoyRows(i).some(r => r.bkg);
-    if(shippedSet.has(k) && !hasDraft && !c.manual){
+    /* ADD TO DATABASE แล้ว + ไม่มี draft ค้าง → ลบทิ้ง (แม้ manual — เป็นเรือเปล่าที่ ADD แล้วในเครื่องอื่น เช่น iPad ยังค้าง) */
+    if(shippedSet.has(k) && !hasDraft){
       localStorage.removeItem(getInvKey(i));
       localStorage.removeItem(getLoyKey(i));
+      clearDbSet(i);
       changed = true;
       return;
     }
