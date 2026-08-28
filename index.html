@@ -3628,7 +3628,7 @@ async function searchBkgHistory(){
   try{
     const { data, error } = await sb.from('booking_events')
       .select('id,event_type,from_vessel,to_vessel,vol,detail,at,by_user')
-      .eq('booking_no', q).order('at', { ascending:true });
+      .eq('booking_no', q).order('at', { ascending:false });   /* ล่าสุดขึ้นบน */
     if(error) throw error;
     if(!data || !data.length){ box.innerHTML = '<div style="color:#94a3b8;padding:14px;text-align:center;">ไม่มีประวัติของ '+h(q)+'</div>'; return; }
     box.innerHTML = data.map(ev=>{
