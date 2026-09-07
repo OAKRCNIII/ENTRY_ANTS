@@ -3081,7 +3081,7 @@ function buildInvTableHtml(c, dbRows){
       <td><input id="xi_des_${r}" type="text" value="${h(d.destination||'')}" readonly tabindex="-1" style="${_ro}color:#334155;"></td>
       <td><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}"></td>
       <td><input id="xi_vol_${r}" type="text" value="${d.container_count||''}" readonly tabindex="-1" style="${_ro}text-align:center;"></td>
-      <td>${(d.invoice_no||d.booking_no)?`<button class="xci-del" onclick="clearInvRow(${r})" title="เอาบุคกิ้งกลับเป็นลอย">✕</button>`:''}</td>
+      <td style="white-space:nowrap;">${(d.invoice_no||d.booking_no)?`<button type="button" onclick="reviseInv(${r})" title="ย้ายทั้งอินวอยซ์ (+BKG) ไปเรืออื่น" style="font-size:12px;padding:1px 5px;border:1px solid #93c5fd;background:#eff6ff;border-radius:6px;cursor:pointer;margin-right:3px;">↪</button><button class="xci-del" onclick="clearInvRow(${r})" title="เอาบุคกิ้งกลับเป็นลอย">✕</button>`:''}</td>
     </tr>`;
   }
   return html;
@@ -3376,6 +3376,7 @@ function reviseSelChanged(){
 }
 async function confirmRevise(){
   const src = window._reviseSrc; if(!src) return;
+  if(src.mode === 'inv'){ return confirmReviseInv(); }   // ย้ายทั้งอินวอยซ์
   const { idx, r } = src;
   const j = parseInt(document.getElementById('reviseSelect').value);
   if(isNaN(j)) return;
@@ -3408,6 +3409,70 @@ async function confirmRevise(){
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));   // รีเฟรชลำนี้ → หายไป
   calcXlsTotals();
   alert('✅ ย้าย ' + moved.bkg + ' (' + vol + ' ตู้) → ' + (tc.vessel || 'เรือปลายทาง') + '\nไปกดดูที่เรือปลายทางได้เลย (อย่าลืมกดบันทึก Draft)');
+}
+
+// ── REVISE INV: ย้ายทั้งอินวอยซ์ (+BKG) ไปเรืออื่น (ใช้ modal เดียวกับ reviseLoy) ──
+function reviseInv(r){
+  saveInvDraft();
+  const idx = currentVslIdx;
+  const inv = (document.getElementById('xi_inv_'+r)?.value||'').trim();
+  const des = (document.getElementById('xi_des_'+r)?.value||'').trim();
+  const bkg = (document.getElementById('xi_bkg_'+r)?.value||'').trim();
+  const vol = document.getElementById('xi_vol_'+r)?.value||'';
+  if(!inv && !bkg){ alert('แถวนี้ไม่มีอินวอยซ์'); return; }
+  const cfgs = loadSlotConfigs();
+  const opts = [];
+  for(let i=0;i<SLOT_COUNT;i++){
+    if(i===idx) continue;
+    const c = cfgs[i] || {};
+    if(c.vessel && c.sailDate)
+      opts.push(`<option value="${i}" data-date="${h(String(c.sailDate).substring(0,10))}">${h(c.vessel)}</option>`);
+  }
+  if(!opts.length){ alert('ยังไม่มีเรือปลายทางที่กำลังวางแพลน\n(ต้องมีเรือลำอื่นที่กรอกชื่อ + วันที่ไว้ก่อน)'); return; }
+  window._reviseSrc = { idx, r, mode:'inv' };
+  document.getElementById('reviseInfo').textContent = 'อินวอยซ์ ' + inv + (bkg?(' · BKG '+bkg):'');
+  document.getElementById('reviseVol').value = vol || 0;
+  document.getElementById('reviseSelect').innerHTML = opts.join('');
+  reviseSelChanged();
+  document.getElementById('reviseModal').style.display = 'flex';
+}
+async function confirmReviseInv(){
+  const src = window._reviseSrc; if(!src) return;
+  const { idx, r } = src;
+  const j = parseInt(document.getElementById('reviseSelect').value);
+  if(isNaN(j)) return;
+  const vol = parseFloat(document.getElementById('reviseVol').value) || 0;
+  const inv = (document.getElementById('xi_inv_'+r)?.value||'').trim();
+  const des = (document.getElementById('xi_des_'+r)?.value||'').trim();
+  const bkg = (document.getElementById('xi_bkg_'+r)?.value||'').trim();
+  if(!inv && !bkg){ document.getElementById('reviseModal').style.display='none'; return; }
+  const moved = { inv, des, bkg, vol: String(vol) };
+  const cfgs = loadSlotConfigs();
+  const tc = cfgs[j] || {};
+  let tgt = loadInvDraft(j);
+  /* กันข้อมูลหาย: ลำปลายทางยังไม่เคยเปิด (draft ว่าง) → ดึงอินวอยซ์เดิมจาก vessel_plan WEB มา merge ก่อน */
+  if(!tgt.some(x=>x && x.inv) && tc.vessel && tc.sailDate){
+    try{
+      const { data } = await sb.from('vessel_plan')
+        .select('invoice_no,destination,bkg_no,vol')
+        .eq('vessel_name', tc.vessel).eq('sail_date', String(tc.sailDate).substring(0,10)).eq('sheet_name','WEB');
+      const dbInv = (data||[]).filter(x=>!(x.invoice_no||'').toUpperCase().startsWith('LOY-'))
+                              .map(x=>({ inv:x.invoice_no||'', des:x.destination||'', bkg:x.bkg_no||'', vol:String(x.vol||'') }));
+      if(dbInv.length) tgt = dbInv;
+    }catch(e){ console.warn('reviseInv: โหลดลำปลายทางไม่ได้', e); }
+  }
+  let placed = false;                    // ใส่ในลำปลายทาง (แถวว่างแรก หรือต่อท้าย)
+  for(let k=0;k<tgt.length;k++){ if(!tgt[k] || !tgt[k].inv){ tgt[k] = moved; placed = true; break; } }
+  if(!placed) tgt.push(moved);
+  localStorage.setItem(getInvKey(j), JSON.stringify(tgt));
+  /* เอาออกจากลำนี้ (เคลียร์แถว r) */
+  ['xi_inv_','xi_des_','xi_bkg_','xi_vol_'].forEach(p=>{ const el=document.getElementById(p+r); if(el) el.value=''; });
+  saveInvDraft();
+  _queueBookingEvent({ booking_no: bkg||inv, event_type:'move', from_vessel:(cfgs[idx]||{}).vessel||'', to_vessel: tc.vessel||'', vol, detail:'ย้ายอินวอยซ์ '+inv+(bkg?(' (BKG '+bkg+')'):'') });
+  document.getElementById('reviseModal').style.display = 'none';
+  document.getElementById('xlsInvBody').innerHTML = buildInvTableHtml(cfgs[idx]||{}, []);
+  calcXlsTotals();
+  alert('✅ ย้ายอินวอยซ์ ' + inv + ' (' + vol + ' ตู้) → ' + (tc.vessel || 'เรือปลายทาง') + '\nไปกดดูที่เรือปลายทางได้เลย (อย่าลืมกดบันทึก Draft)');
 }
 
 // ── SPLIT: ซอยบุคกิ้งลอยเป็นหลายอัน (เลขใหม่ default ถัดจากเดิม) ──
