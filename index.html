@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Inter',sans-serif;background:#f1f5f9;color:#0f172a;min-height:100vh;}
@@ -346,6 +347,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
     <button class="tab" onclick="switchTab('dbvessel',this)">📦 DATABASE เรือ</button>
     <button class="tab" onclick="switchTab('docs',this)">📎 เอกสาร</button>
     <button class="tab" onclick="switchTab('workorder',this)">📋 ใบคำสั่ง</button>
+    <button class="tab" id="tabBtnCado" style="display:none;" onclick="switchTab('cado',this)">🔒 ใบทำ CADO</button>
   </div>
 
   <!-- MAIN -->
@@ -822,6 +824,35 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
       </div>
     </div><!-- /tab-workorder -->
 
+    <!-- ══════════════════════════════
+         TAB: ใบทำ CADO (OOCL lock sheet)
+    ══════════════════════════════ -->
+    <div class="tab-content" id="tab-cado">
+      <div class="cado-card">
+        <h2 style="font-size:19px;margin:0 0 2px;">🔒 ใบทำ CADO</h2>
+        <div style="color:#64748b;font-size:12.5px;margin-bottom:12px;">อัปโหลดใบ OOCL Container Allocation (เขียนเลข P มาแล้ว) → AI (Opus) อ่านแยกกลุ่ม → ตรวจ ISO 6346 → ออกใบ CADO (PDF) + Excel</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <input type="file" id="cadoFile" accept="image/*,application/pdf">
+          <button class="btn btn-primary" id="cadoBtnRead" onclick="cadoRead()">🤖 อ่านด้วย AI</button>
+        </div>
+        <div id="cadoMsg" class="cado-msg"></div>
+      </div>
+      <div class="cado-card" id="cadoReviewCard" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+          <div style="font-weight:800;font-size:15px;">📋 ตรวจ/แก้ก่อนออกใบ <span id="cadoBcLbl" style="font-size:12px;color:#64748b;"></span></div>
+          <div style="font-size:11px;color:#94a3b8;">ติ๊กเลือกใบที่จะออก · แก้เลข P/เบอร์ตู้ได้ · ตู้ ISO ไม่ผ่านจะเตือน</div>
+        </div>
+        <div id="cadoGroups"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn btn-primary" style="background:#065f46;" onclick="cadoPrint()">🖨️ ออก PDF (ใบที่เลือก)</button>
+          <button class="btn btn-primary" style="background:#166534;" onclick="cadoExcel()">📊 ออก Excel (ใบที่เลือก)</button>
+          <button class="btn btn-secondary" onclick="cadoSelAll(true)">เลือกทั้งหมด</button>
+          <button class="btn btn-secondary" onclick="cadoSelAll(false)">ไม่เลือก</button>
+        </div>
+        <div id="cadoMsg2" class="cado-msg"></div>
+      </div>
+    </div><!-- /tab-cado -->
+
   </div><!-- /main -->
 </div><!-- /app -->
 
@@ -889,6 +920,9 @@ function applyRoleTabs(role){
       btn.style.display='';
     }
   });
+  /* แท็บ "ใบทำ CADO" — เฉพาะ OAK_THIRA + TARN_ANTS (กันด้วย username เพราะ BOW role เดียวกับ TARN) */
+  const cadoBtn = document.getElementById('tabBtnCado');
+  if(cadoBtn) cadoBtn.style.display = (LOGGED_USER==='OAK_THIRA' || LOGGED_USER==='TARN_ANTS') ? '' : 'none';
   /* ถ้า role จำกัด tab ให้ active ไปที่ tab แรกที่อนุญาต (ผ่าน switchTab เพื่อให้ init ของแท็บนั้นทำงาน) */
   if(allowed){
     const firstTab = document.querySelector(`.tab[onclick*="switchTab('${allowed[0]}'"]`);
@@ -4538,6 +4572,150 @@ function h(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').r
 <script>
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+</script>
+
+<!-- ══════════ ใบทำ CADO — styles ══════════ -->
+<style>
+.cado-card{background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:16px 18px;margin-bottom:16px;}
+.cado-msg{margin-top:10px;font-size:13px;font-weight:700;white-space:pre-line;}
+.cado-msg.ok{color:#059669;} .cado-msg.bad{color:#b91c1c;} .cado-msg.wait{color:#4338ca;}
+.cado-grp{border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fafbfc;}
+.cado-grp.off{opacity:.45;}
+.cado-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+.cado-row label{font-size:11px;font-weight:700;color:#475569;display:flex;flex-direction:column;gap:2px;}
+.cado-row input{font:inherit;font-size:13px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:7px;}
+.cado-row input.p{width:72px;font-weight:800;color:#4338ca;} .cado-row input.bk{width:120px;} .cado-row input.dep{width:64px;} .cado-row input.dt{width:110px;}
+.cado-row .sel{transform:scale(1.3);margin-right:4px;}
+.cado-ct{width:100%;min-height:96px;font-family:Consolas,monospace;font-size:13px;padding:8px;border:1px solid #cbd5e1;border-radius:7px;letter-spacing:.4px;}
+.cado-isobad{color:#b91c1c;font-weight:700;font-size:12px;margin-top:4px;}
+.cado-isook{color:#059669;font-weight:700;font-size:12px;margin-top:4px;}
+</style>
+<script>
+/* ══════════ ใบทำ CADO — AI (Opus) อ่านใบ OOCL → ออกใบล็อคตู้ PDF + Excel ══════════ */
+var cadoV={}; (function(){var x=10;for(var i=0;i<26;i++){while(x%11===0)x++;cadoV[String.fromCharCode(65+i)]=x;x++;}})();
+function cadoIso(cn){ if(!/^[A-Z]{4}\d{7}$/.test(cn))return false; var s=0;for(var i=0;i<10;i++){var c=cn[i];s+=(c>='0'&&c<='9'?+c:cadoV[c])*Math.pow(2,i);}var cd=s%11;if(cd===10)cd=0;return cd===+cn[10]; }
+var cadoNG=0;
+function cadoMsgSet(id,t,c){ var el=document.getElementById(id); if(el){el.className='cado-msg '+(c||'');el.textContent=t;} }
+function cadoFileB64(f){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result.split(',')[1]);};r.onerror=rej;r.readAsDataURL(f);});}
+function cadoEsc(s){return String(s==null?'':s).replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+async function cadoRead(){
+  var f=document.getElementById('cadoFile').files[0];
+  if(!f){ cadoMsgSet('cadoMsg','เลือกไฟล์ก่อน','bad'); return; }
+  var ext=(f.name.split('.').pop()||'').toLowerCase();
+  var btn=document.getElementById('cadoBtnRead'); btn.disabled=true;
+  cadoMsgSet('cadoMsg','🤖 กำลังให้ AI (Opus) อ่าน... (20–40 วินาที)','wait');
+  try{
+    var b64=await cadoFileB64(f);
+    var res=await fetch(SB_URL+'/functions/v1/read-locksheet',{method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY},
+      body:JSON.stringify({file_b64:b64,ext:ext})});
+    var d=await res.json();
+    if(d.error){ cadoMsgSet('cadoMsg','❌ '+d.error,'bad'); btn.disabled=false; return; }
+    cadoRenderReview(d);
+    cadoMsgSet('cadoMsg',(d.readable?'✅':'⚠️ อ่านไม่ค่อยออก · ')+'อ่านได้ '+d.groups.length+' ใบ · '+d.total_containers+' ตู้'+(d.iso_fail?(' · ⚠️ ISO ไม่ผ่าน '+d.iso_fail+' ตู้ (เช็คสีแดง)'):' · ISO ผ่านครบ'),d.iso_fail?'bad':'ok');
+  }catch(e){ cadoMsgSet('cadoMsg','❌ เชื่อมต่อไม่ได้: '+e,'bad'); }
+  btn.disabled=false;
+}
+function cadoRenderReview(d){
+  document.getElementById('cadoReviewCard').style.display='block';
+  document.getElementById('cadoBcLbl').textContent=d.bc?('· BC# '+d.bc):'';
+  var box=document.getElementById('cadoGroups'); box.innerHTML=''; cadoNG=d.groups.length;
+  d.groups.forEach(function(g,i){
+    box.insertAdjacentHTML('beforeend',
+    '<div class="cado-grp" id="cadoGrp'+i+'">'+
+      '<div class="cado-row">'+
+        '<input type="checkbox" class="sel" id="cadoSel'+i+'" checked onchange="cadoToggleGrp('+i+')">'+
+        '<label>P<input class="p" id="cadoP'+i+'" value="'+cadoEsc(g.p)+'"></label>'+
+        '<label>Booking<input class="bk" id="cadoBk'+i+'" value="'+cadoEsc(g.booking)+'"></label>'+
+        '<label>Depot<input class="dep" id="cadoDep'+i+'" value="'+cadoEsc(g.depot)+'"></label>'+
+        '<label>วันที่<input class="dt" id="cadoDt'+i+'" value="'+cadoEsc(g.date)+'"></label>'+
+      '</div>'+
+      '<textarea class="cado-ct" id="cadoCt'+i+'" oninput="cadoChkIso('+i+')">'+g.containers.join('\n')+'</textarea>'+
+      '<div id="cadoIso'+i+'"></div>'+
+    '</div>');
+    cadoChkIso(i);
+  });
+}
+function cadoCtrsOf(i){ return document.getElementById('cadoCt'+i).value.split(/\r?\n/).map(function(s){return s.replace(/\s+/g,'').toUpperCase();}).filter(Boolean); }
+function cadoChkIso(i){
+  var cs=cadoCtrsOf(i), bad=cs.filter(function(c){return !cadoIso(c);});
+  var el=document.getElementById('cadoIso'+i);
+  if(!cs.length){ el.className=''; el.textContent=''; return; }
+  if(bad.length){ el.className='cado-isobad'; el.textContent='⚠️ ISO ไม่ผ่าน '+bad.length+' ตู้: '+bad.join(', ')+' (อาจพิมพ์ผิด)'; }
+  else { el.className='cado-isook'; el.textContent='✅ ISO ผ่าน '+cs.length+' ตู้'; }
+}
+function cadoToggleGrp(i){ document.getElementById('cadoGrp'+i).classList.toggle('off', !document.getElementById('cadoSel'+i).checked); }
+function cadoSelAll(v){ for(var i=0;i<cadoNG;i++){ document.getElementById('cadoSel'+i).checked=v; cadoToggleGrp(i); } }
+function cadoCollect(sel){
+  var out=[];
+  for(var i=0;i<cadoNG;i++){
+    if(sel && !document.getElementById('cadoSel'+i).checked) continue;
+    var cs=cadoCtrsOf(i); if(!cs.length) continue;
+    out.push({ p:document.getElementById('cadoP'+i).value.trim().toUpperCase(),
+      booking:document.getElementById('cadoBk'+i).value.trim().toUpperCase(),
+      depot:document.getElementById('cadoDep'+i).value.trim().toUpperCase(),
+      date:document.getElementById('cadoDt'+i).value.trim(), containers:cs });
+  }
+  return out;
+}
+var CADO_SHEET_CSS=
+"@page{size:A4 portrait;margin:10mm;} *{box-sizing:border-box;} body{font-family:Arial,'Tahoma',sans-serif;color:#000;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}"+
+".sheet{width:190mm;padding:6mm 3mm;page-break-after:always;} .sheet:last-child{page-break-after:auto;}"+
+".top{display:flex;border:2px solid #000;} .top>div{border-right:2px solid #000;padding:4px 8px;display:flex;flex-direction:column;justify-content:center;} .top>div:last-child{border-right:0;}"+
+".brand{width:26%;align-items:center;text-align:center;} .logo{color:#c0392b;font-weight:900;font-size:32px;line-height:1;} .tag{font-style:italic;font-size:10px;color:#c0392b;margin-top:2px;}"+
+".mid{width:40%;align-items:center;text-align:center;} .mid .bk{font-weight:800;font-size:20px;} .mid .ttl{font-weight:700;font-size:15px;margin-top:2px;}"+
+".pno{width:20%;align-items:center;justify-content:center;} .pno span{font-weight:900;font-size:38px;}"+
+".dt{width:14%;} .dt .r{font-size:10px;font-weight:700;} .dt .r+.r{margin-top:14px;}"+
+".info{display:flex;margin-top:10px;align-items:flex-start;} .fields{flex:1;} .fields table{border-collapse:collapse;} .fields td{font-size:12px;padding:2px 0;} .fields td.k{font-weight:800;white-space:nowrap;padding-right:14px;} .fields td.v{font-weight:700;}"+
+".pip{border:3px solid #000;width:150px;height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-left:18px;} .pip .a{font-weight:900;font-size:38px;} .pip .b{font-weight:900;font-size:40px;margin-top:14px;}"+
+".qty{margin:12px 0 8px;font-weight:800;font-size:14px;} .qty b{font-size:15px;}"+
+"table.grid{width:100%;border-collapse:collapse;} table.grid td{border:2px solid #000;height:44px;} td.no{width:16%;text-align:center;font-weight:900;font-size:26px;} td.ctr{width:44%;text-align:center;font-weight:900;font-size:28px;} td.blank{width:20%;}";
+function cadoSheetHTML(g){
+  var last4=(g.booking.match(/(\d{4})\s*$/)||[])[1]||'';
+  var rows=g.containers.map(function(cn,i){return '<tr><td class="no">'+(i+1)+'</td><td class="ctr">'+cn+'</td><td class="blank"></td><td class="blank"></td></tr>';}).join('');
+  var dnorm=g.date.replace(/-\d{4}$/,'').replace('-',' ');
+  return '<div class="sheet"><div class="top"><div class="brand"><div class="logo">OOCL</div><div class="tag">We take it personally</div></div>'+
+   '<div class="mid"><div class="bk">'+(g.booking||'&nbsp;')+'</div><div class="ttl">Booking Acknowledgement</div></div>'+
+   '<div class="pno"><span>'+g.p+'</span></div>'+
+   '<div class="dt"><div class="r">DATE: '+dnorm+'</div><div class="r">VERSION NUM</div></div></div>'+
+   '<div class="info"><div class="fields"><table>'+
+     '<tr><td class="k">BOOKING NUMBER :</td><td class="v">'+g.booking+'</td></tr>'+
+     '<tr><td class="k">BOOKING STATUS :</td><td class="v">Confirmed</td></tr>'+
+     '<tr><td class="k">CUSTOMER :</td><td class="v">A.N.T.S Star Transit Co Ltd</td></tr>'+
+     '<tr><td class="k">DEPOT :</td><td class="v">'+g.depot+'</td></tr>'+
+     '<tr><td class="k">PICK UP :</td><td class="v">PIP</td></tr>'+
+   '</table></div><div class="pip"><div class="a">PIP</div><div class="b">#'+last4+'</div></div></div>'+
+   '<div class="qty">TOTAL BOOKING CONTAINER QT&nbsp;&nbsp; <b>'+g.containers.length+" X 40' Hi-Cube Container</b></div>"+
+   '<table class="grid"><tbody>'+rows+'</tbody></table></div>';
+}
+function cadoPrint(){
+  var gs=cadoCollect(true);
+  if(!gs.length){ cadoMsgSet('cadoMsg2','เลือกใบก่อน','bad'); return; }
+  var bad=[]; gs.forEach(function(g){g.containers.forEach(function(c){if(!cadoIso(c))bad.push(g.p+' '+c);});});
+  var html='<!doctype html><html lang="th"><head><meta charset="utf-8"><title>ใบทำ CADO</title><style>'+CADO_SHEET_CSS+'</style></head><body>'+gs.map(cadoSheetHTML).join('')+'<'+'/body><'+'/html>';
+  var w=window.open('','_blank');
+  if(!w){ cadoMsgSet('cadoMsg2','เบราว์เซอร์บล็อคหน้าต่างใหม่ — อนุญาต popup แล้วลองใหม่','bad'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 400);
+  cadoMsgSet('cadoMsg2',(bad.length?('⚠️ ISO ไม่ผ่าน '+bad.length+' ตู้: '+bad.join(', ')+' — พิมพ์แล้วแต่ควรเช็ค'):('เปิดหน้าพิมพ์ '+gs.length+' ใบแล้ว')),bad.length?'bad':'ok');
+}
+function cadoExcel(){
+  var gs=cadoCollect(true);
+  if(!gs.length){ cadoMsgSet('cadoMsg2','เลือกใบก่อน','bad'); return; }
+  if(typeof XLSX==='undefined'){ cadoMsgSet('cadoMsg2','โหลดตัวสร้าง Excel ไม่ได้ (เน็ต?)','bad'); return; }
+  var wb=XLSX.utils.book_new();
+  var sum=[['เลขกำกับ','Booking','จำนวนตู้']], totCtr=0;
+  gs.forEach(function(g){ sum.push([g.p,g.booking,g.containers.length]); totCtr+=g.containers.length; });
+  sum.push(['รวม','',totCtr]);
+  var ws1=XLSX.utils.aoa_to_sheet(sum); ws1['!cols']=[{wch:12},{wch:16},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws1,'สรุป');
+  var det=[['เลขกำกับ','เบอร์ตู้']];
+  gs.forEach(function(g){ g.containers.forEach(function(c){ det.push([g.p,c]); }); });
+  var ws2=XLSX.utils.aoa_to_sheet(det); ws2['!cols']=[{wch:12},{wch:18}];
+  XLSX.utils.book_append_sheet(wb,ws2,'รายตู้');
+  XLSX.writeFile(wb,'CADO_เบอร์ตู้.xlsx');
+  cadoMsgSet('cadoMsg2','📊 ออก Excel แล้ว · ชีทสรุป '+gs.length+' ใบ + ชีทรายตู้ '+(det.length-1)+' ตู้','ok');
 }
 </script>
 </body>
