@@ -920,9 +920,10 @@ function applyRoleTabs(role){
       btn.style.display='';
     }
   });
-  /* แท็บ "ใบทำ CADO" — เฉพาะ OAK_THIRA + TARN_ANTS (กันด้วย username เพราะ BOW role เดียวกับ TARN) */
+  /* แท็บ "ใบทำ CADO" — เฉพาะ OAK_THIRA + TARN_ANTS + BOW_ANTS (กันด้วย username) */
   const cadoBtn = document.getElementById('tabBtnCado');
-  if(cadoBtn) cadoBtn.style.display = (LOGGED_USER==='OAK_THIRA' || LOGGED_USER==='TARN_ANTS') ? '' : 'none';
+  const CADO_USERS = ['OAK_THIRA','TARN_ANTS','BOW_ANTS'];
+  if(cadoBtn) cadoBtn.style.display = CADO_USERS.includes(LOGGED_USER) ? '' : 'none';
   /* ถ้า role จำกัด tab ให้ active ไปที่ tab แรกที่อนุญาต (ผ่าน switchTab เพื่อให้ init ของแท็บนั้นทำงาน) */
   if(allowed){
     const firstTab = document.querySelector(`.tab[onclick*="switchTab('${allowed[0]}'"]`);
