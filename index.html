@@ -887,6 +887,8 @@ const canRunAI = () => AI_RUN_USERS.includes(LOGGED_USER);
 /* role ที่อัพได้เฉพาะ DRAFT (ซ่อน FINAL + ปุ่มลบ + Dashboard) */
 const isDraftOnly = () => (USER_ROLE==='doc_draft' || USER_ROLE==='doc_wo');
 const sb = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false, autoRefreshToken:true}});  /* ไม่จำ login — ปิด/รีเฟรชแล้วต้องล็อกอินใหม่ */
+/* ส่ง user access token ให้ Edge Function (ตัว AI ต้องล็อกอินก่อน — กันคนนอกเรียกเปลืองค่า API) */
+async function _fnAuth(){ try{ const {data}=await sb.auth.getSession(); return 'Bearer '+((data&&data.session&&data.session.access_token)||''); }catch(e){ return 'Bearer '; } }
 let USER_ROLE = '', LOGGED_USER = '';
 
 // ═══════════════════════════════════════════════════════════
@@ -1625,7 +1627,7 @@ async function checkDocAI(type, auto){
   try{
     const res = await fetch(SB_URL+'/functions/v1/'+EDGE_CHECK_FN, {
       method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SB_KEY, 'apikey':SB_KEY },
+      headers:{ 'Content-Type':'application/json', 'Authorization': await _fnAuth(), 'apikey':SB_KEY },
       body: JSON.stringify({ invoice_no:inv, folder:lf.folder, file_name:lf.name })
     });
     const d = await res.json();
@@ -4598,7 +4600,7 @@ async function cadoRead(){
   try{
     var b64=await cadoFileB64(f);
     var res=await fetch(SB_URL+'/functions/v1/read-locksheet',{method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY},
+      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization': await _fnAuth()},
       body:JSON.stringify({file_b64:b64,ext:ext})});
     var d=await res.json();
     if(d.error){ cadoMsgSet('cadoMsg','❌ '+d.error,'bad'); btn.disabled=false; return; }
