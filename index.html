@@ -864,16 +864,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
 const EDGE_CHECK_FN = 'hyper-api';   /* slug จริงของ Edge Function (ชื่อโชว์ = check-doc แต่ URL คือ hyper-api) */
 const SB_URL = 'https://ywslgrusflfuxtrtvlfu.supabase.co';
 const SB_KEY = 'sb_publishable_nrjNNyA08-GCRphIQuzvvg_YpGxiYeY';  /* anon/publishable — เปิดเผยได้ปลอดภัย, ข้อมูลจริงกันด้วย RLS + Supabase Auth */
-const _CREDS = [
-  {user:'OAK_THIRA',  hash:'7d37d06492e394475abdff1317de1cb6b97c16d5584400fa07875594165206de', role:'admin'},
-  {user:'YAI_THIRA',  hash:'3c4e528de01db4470664703da16285ddca9df0c04c1239622c1df2735c60199f', role:'transport'},
-  {user:'ANTS_THIRA', hash:'33ac0909156b1b05d69a4cd3b827fb9b4789ba219e7fb2437ac4323d5771a0eb', role:'vessel_manager'},
-  {user:'SU_THIRA',   hash:'61712a2a921078036bdbcd28455bf2417c14ee9ce465a0d1c0027ef488255e09', role:'su_clerk'},
-  {user:'DOC_THIRA',  hash:'63162c7482c634ef500b86969ad61af159550e3c441c0d2d4be44bab08553921', role:'doc_clerk'},
-  {user:'TARN_ANTS',  hash:'397f493666309dc1ed7b987b4eeaf66de187af201a8387cfe8e25c1f909d06f0', role:'doc_draft'},
-  {user:'BOW_ANTS',   hash:'43151a6c0190522a62a4625dbfe41e7e9b5e810adab3af286ffeefa761e87fd0', role:'doc_draft'},
-  {user:'PLA_ANTS',   hash:'4eb57a309e9e3c5384abb29d538d7356094d07c64e0c79fd2ac0c83eb6839aef', role:'doc_wo'},
-];
+/* (ลบ hash creds เก่าที่ไม่ใช้แล้ว — login ใช้ Supabase Auth · security audit 10 ก.ย.69) */
 /* tabs ที่แต่ละ role มีสิทธิ์เห็น (ไม่ระบุ = เห็นทั้งหมด)
    1. OAK_THIRA (admin)      → ทุกแท็บ · แก้ใบคำสั่งได้
    2. SU_THIRA (su_clerk)    → SU Statement เท่านั้น
@@ -901,10 +892,6 @@ let USER_ROLE = '', LOGGED_USER = '';
 // ═══════════════════════════════════════════════════════════
 //  AUTH
 // ═══════════════════════════════════════════════════════════
-async function _hash(s){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
 function applyRoleTabs(role){
   const allowed = ROLE_TABS[role]; /* undefined = ไม่จำกัด */
   /* doc_draft (TARN/BOW) → ซ่อนปุ่มไป Dashboard หลัก */
