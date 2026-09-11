@@ -3416,11 +3416,15 @@ async function confirmRevise(){
   if(!tgt.some(x=>x && x.bkg) && tc.vessel && tc.sailDate){
     try{
       const { data } = await sb.from('vessel_plan')
-        .select('bkg_no,vol,notes,invoice_no')
+        .select('bkg_no,vol,notes,invoice_no,destination')
         .eq('vessel_name', tc.vessel).eq('sail_date', String(tc.sailDate).substring(0,10)).eq('sheet_name','WEB');
       const dbLoy = (data||[]).filter(x=>(x.invoice_no||'').toUpperCase().startsWith('LOY-'))
                               .map(x=>({ bkg:x.bkg_no||'', vol:x.vol||0, rem:x.notes||'' }));
       if(dbLoy.length) tgt = dbLoy;
+      /* กันอินวอยซ์ของลำปลายทางหาย: draft อินวอยซ์ยังว่าง → seed จาก DB ด้วย (ไม่งั้น save ทับอินวอยซ์หาย) */
+      const dbInv = (data||[]).filter(x=>!(x.invoice_no||'').toUpperCase().startsWith('LOY-'))
+                              .map(x=>({ inv:x.invoice_no||'', des:x.destination||'', bkg:x.bkg_no||'', vol:String(x.vol||'') }));
+      if(dbInv.length && !loadInvDraft(j).some(x=>x&&x.inv)) localStorage.setItem(getInvKey(j), JSON.stringify(dbInv));
     }catch(e){ console.warn('revise: โหลดลอยลำปลายทางไม่ได้', e); }
   }
   cur.splice(r, 1);                     // เอาออกจากลำนี้ (ยุบแถว)
@@ -3479,11 +3483,15 @@ async function confirmReviseInv(){
   if(!tgt.some(x=>x && x.inv) && tc.vessel && tc.sailDate){
     try{
       const { data } = await sb.from('vessel_plan')
-        .select('invoice_no,destination,bkg_no,vol')
+        .select('invoice_no,destination,bkg_no,vol,notes')
         .eq('vessel_name', tc.vessel).eq('sail_date', String(tc.sailDate).substring(0,10)).eq('sheet_name','WEB');
       const dbInv = (data||[]).filter(x=>!(x.invoice_no||'').toUpperCase().startsWith('LOY-'))
                               .map(x=>({ inv:x.invoice_no||'', des:x.destination||'', bkg:x.bkg_no||'', vol:String(x.vol||'') }));
       if(dbInv.length) tgt = dbInv;
+      /* กันบุคกิ้งลอยของลำปลายทางหาย: draft ลอยยังว่าง → seed จาก DB ด้วย (ไม่งั้น save ทับลอยหาย) */
+      const dbLoy = (data||[]).filter(x=>(x.invoice_no||'').toUpperCase().startsWith('LOY-'))
+                              .map(x=>({ bkg:x.bkg_no||'', vol:x.vol||0, rem:x.notes||'' }));
+      if(dbLoy.length && !loadLoyRows(j).some(x=>x&&x.bkg)) saveLoyRows(j, dbLoy);
     }catch(e){ console.warn('reviseInv: โหลดลำปลายทางไม่ได้', e); }
   }
   let placed = false;                    // ใส่ในลำปลายทาง (แถวว่างแรก หรือต่อท้าย)
