@@ -4350,6 +4350,7 @@ async function renderVslOverview(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button onclick="addNewVessel()" style="padding:7px 14px;border:none;background:#16a34a;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;">➕ เพิ่มเรือใหม่</button>
         <button onclick="recallOldVessel()" style="padding:7px 14px;border:none;background:#0f2a52;color:#fff;border-radius:9px;font-weight:800;cursor:pointer;">📼 เรียกเรือเก่า</button>
+        <button onclick="clearEmptyVessels()" style="padding:7px 14px;border:1px solid #fca5a5;background:#fef2f2;border-radius:9px;font-weight:700;cursor:pointer;color:#b91c1c;">🧹 ล้างเรือเปล่า</button>
         <button onclick="loadVessels()" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-weight:700;cursor:pointer;color:#0f2a52;">🔄 รีเฟรช</button>
       </div>
     </div>`;
@@ -4378,6 +4379,25 @@ async function renderVslOverview(){
   });
   html += `</div>`;
   wrap.innerHTML = html;
+}
+
+/* 🧹 ล้างเรือเปล่า (0 ตู้) ออกจาก slot ในเครื่องนี้ — ไม่แตะ DB, ไม่ shift index (draft ลำอื่นไม่เพี้ยน) */
+async function clearEmptyVessels(){
+  let sums=[]; try{ sums = await computeVesselSummaries(); }catch(e){ alert('โหลดสรุปไม่ได้ ลองรีเฟรชก่อน'); return; }
+  const empties = sums.filter(s => (s.invSum + s.loySum) === 0);
+  if(!empties.length){ alert('ไม่มีเรือเปล่าให้ล้าง 👍'); return; }
+  const fmt = d => { if(!d) return '-'; const p=String(d).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; };
+  if(!confirm('ล้างเรือเปล่า '+empties.length+' ลำ ออกจากเครื่องนี้?\n\n'+empties.map(s=>'• '+s.vessel+' ('+fmt(s.date)+')').join('\n')+'\n\n⚠️ ลบเฉพาะแคชในเครื่องนี้ ไม่แตะข้อมูลใน DB')) return;
+  const configs = loadSlotConfigs();
+  empties.forEach(s => {
+    const i = s.idx;
+    configs[i] = {};                     // ล้าง config (คงตำแหน่ง index → draft ลำอื่นไม่เลื่อน)
+    localStorage.removeItem(getInvKey(i));
+    localStorage.removeItem(getLoyKey(i));
+    clearDbSet(i);
+  });
+  saveSlotConfigs(configs);
+  renderVslOverview();
 }
 
 async function forceRefresh(){
