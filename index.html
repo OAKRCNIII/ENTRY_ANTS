@@ -4355,6 +4355,15 @@ async function renderVslOverview(){
     saveSlotConfigs(_cfg);
   }
   sums = sums.filter(s => (s.invSum+s.loySum) > 0);   /* โชว์เฉพาะเรือที่มีอินวอยซ์/ลอย */
+  /* dedup เรือซ้ำ: slot หลายอันชี้ ชื่อเรือ+วัน เดียวกัน (แคชซ้ำ) → ล้าง slot ซ้ำที่ไม่มีร่างค้าง + โชว์อันเดียว */
+  const _vd={}, _dup=[];
+  sums.forEach(s=>{ const k=(s.vessel||'').trim().toUpperCase()+'|'+(s.date||''); const prev=_vd[k];
+    if(!prev){ _vd[k]=s; return; }
+    const drop = (!s.hasDraft) ? s : (!prev.hasDraft ? prev : null);   /* ล้างตัวไม่มีร่าง (ปลอดภัย); ทั้งคู่มีร่าง=ไม่ล้าง */
+    if(drop){ _dup.push(drop.idx); if(drop===prev)_vd[k]=s; }
+  });
+  if(_dup.length){ const _c2=loadSlotConfigs(); _dup.forEach(i=>{ _c2[i]={}; localStorage.removeItem(getInvKey(i)); localStorage.removeItem(getLoyKey(i)); clearDbSet(i); }); saveSlotConfigs(_c2); }
+  { const _sn=new Set(); sums=sums.filter(s=>{ const k=(s.vessel||'').trim().toUpperCase()+'|'+(s.date||''); if(_sn.has(k))return false; _sn.add(k); return true; }); }
   sums.sort((a,b)=> String(a.date||'9999-99-99').localeCompare(String(b.date||'9999-99-99')));   /* วันเรือใกล้สุดขึ้นบนสุด */
   const fmtDate = d => { if(!d) return '-'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; };
   let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
