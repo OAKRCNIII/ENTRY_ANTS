@@ -4649,27 +4649,72 @@ function cadoClear(){
   var b=document.getElementById('cadoBcLbl'); if(b) b.textContent='';
   cadoMsgSet('cadoMsg2','',''); cadoMsgSet('cadoMsg','ล้างแล้ว — เลือกไฟล์ใหม่ได้','ok');
 }
-function cadoAppend(d, fname){
-  document.getElementById('cadoReviewCard').style.display='block';
-  var box=document.getElementById('cadoGroups');
-  box.insertAdjacentHTML('beforeend','<div class="cado-filehdr">📄 '+cadoEsc(fname||'ไฟล์')+(d.bc?(' · BC# '+cadoEsc(d.bc)):'')+' · '+d.groups.length+' ใบ · '+d.total_containers+' ตู้</div>');
-  d.groups.forEach(function(g){
-    var i=cadoNG++;
-    box.insertAdjacentHTML('beforeend',
-    '<div class="cado-grp" id="cadoGrp'+i+'">'+
+function cadoGrpHTML(i,g){
+  return '<div class="cado-grp" id="cadoGrp'+i+'">'+
       '<div class="cado-row">'+
         '<input type="checkbox" class="sel" id="cadoSel'+i+'" checked onchange="cadoToggleGrp('+i+')">'+
         '<label>P<input class="p" id="cadoP'+i+'" value="'+cadoEsc(g.p)+'"></label>'+
         '<label>Booking<input class="bk" id="cadoBk'+i+'" value="'+cadoEsc(g.booking)+'"></label>'+
         '<label>Depot<input class="dep" id="cadoDep'+i+'" value="'+cadoEsc(g.depot)+'"></label>'+
         '<label>วันที่<input class="dt" id="cadoDt'+i+'" value="'+cadoEsc(g.date)+'"></label>'+
+        '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;align-self:flex-end;" onclick="cadoSplit('+i+')">✂️ แยกใบ</button>'+
       '</div>'+
       '<textarea class="cado-ct" id="cadoCt'+i+'" oninput="cadoChkIso('+i+')">'+g.containers.join('\n')+'</textarea>'+
       '<div id="cadoIso'+i+'"></div>'+
-    '</div>');
+    '</div>';
+}
+function cadoAppend(d, fname){
+  document.getElementById('cadoReviewCard').style.display='block';
+  var box=document.getElementById('cadoGroups');
+  box.insertAdjacentHTML('beforeend','<div class="cado-filehdr">📄 '+cadoEsc(fname||'ไฟล์')+(d.bc?(' · BC# '+cadoEsc(d.bc)):'')+' · '+d.groups.length+' ใบ · '+d.total_containers+' ตู้</div>');
+  d.groups.forEach(function(g){
+    var i=cadoNG++;
+    box.insertAdjacentHTML('beforeend', cadoGrpHTML(i,g));
     cadoChkIso(i);
   });
   cadoUpdateSummary();
+}
+/* ✂️ แยกใบ CADO เป็น 2 กล่อง — เลือกลำดับตู้ที่จะตัด (กล่อง1=1–k, กล่อง2=k+1..ท้าย) */
+function cadoSplit(i){
+  if(!document.getElementById('cadoGrp'+i))return;
+  var existing=document.getElementById('cadoSplitBar'+i);
+  if(existing){ existing.remove(); return; }   /* กดซ้ำ = ปิด */
+  var N=cadoCtrsOf(i).length;
+  if(N<2){ cadoMsgSet('cadoMsg2','ใบนี้มี '+N+' ตู้ — แยกไม่ได้ (ต้องมีอย่างน้อย 2 ตู้)','bad'); return; }
+  var def=Math.floor(N/2);
+  var html='<div id="cadoSplitBar'+i+'" style="margin-top:8px;padding:8px 10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;font-weight:700;color:#3730a3;">'+
+    '✂️ แยกหลังตู้ลำดับที่ <input type="number" id="cadoSplitK'+i+'" min="1" max="'+(N-1)+'" value="'+def+'" style="width:64px;padding:4px 6px;border:1px solid #a5b4fc;border-radius:6px;font-weight:800;" oninput="cadoSplitHint('+i+','+N+')">'+
+    '<span id="cadoSplitHint'+i+'"></span>'+
+    '<button class="btn btn-primary" style="padding:4px 12px;font-size:12px;background:#4338ca;" onclick="cadoSplitDo('+i+')">✅ ยืนยันแยก</button>'+
+    '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="var b=document.getElementById(\'cadoSplitBar'+i+'\');if(b)b.remove();">ยกเลิก</button>'+
+  '</div>';
+  document.getElementById('cadoIso'+i).insertAdjacentHTML('afterend',html);
+  cadoSplitHint(i,N);
+}
+function cadoSplitHint(i,N){
+  var kEl=document.getElementById('cadoSplitK'+i), el=document.getElementById('cadoSplitHint'+i);
+  if(!kEl||!el)return;
+  var k=parseInt(kEl.value)||0;
+  if(k<1||k>=N){ el.innerHTML='<span style="color:#b91c1c;">ใส่เลข 1–'+(N-1)+'</span>'; return; }
+  el.innerHTML='→ กล่อง 1: ตู้ 1–'+k+' ('+k+' ตู้) · กล่อง 2: ตู้ '+(k+1)+'–'+N+' ('+(N-k)+' ตู้)';
+}
+function cadoSplitDo(i){
+  var all=cadoCtrsOf(i), N=all.length;
+  var k=parseInt((document.getElementById('cadoSplitK'+i)||{}).value)||0;
+  if(k<1||k>=N){ cadoMsgSet('cadoMsg2','เลขลำดับที่แยกต้องอยู่ระหว่าง 1–'+(N-1),'bad'); return; }
+  var box1=all.slice(0,k), box2=all.slice(k);
+  document.getElementById('cadoCt'+i).value=box1.join('\n'); cadoChkIso(i);
+  var j=cadoNG++;
+  var g2={ p:'', booking:document.getElementById('cadoBk'+i).value.trim().toUpperCase(),
+    depot:document.getElementById('cadoDep'+i).value.trim().toUpperCase(),
+    date:document.getElementById('cadoDt'+i).value.trim(), containers:box2 };
+  var tmp=document.createElement('div'); tmp.innerHTML=cadoGrpHTML(j,g2);
+  document.getElementById('cadoGrp'+i).after(tmp.firstElementChild);
+  cadoChkIso(j);
+  var sb=document.getElementById('cadoSplitBar'+i); if(sb) sb.remove();
+  cadoUpdateSummary();
+  var pIn=document.getElementById('cadoP'+j); if(pIn) pIn.focus();
+  cadoMsgSet('cadoMsg2','✂️ แยกแล้ว: กล่อง 1 = '+box1.length+' ตู้ · กล่อง 2 = '+box2.length+' ตู้ (อย่าลืมใส่เลข P ของกล่อง 2)','ok');
 }
 function cadoCtrsOf(i){ return document.getElementById('cadoCt'+i).value.split(/\r?\n/).map(function(s){return s.replace(/\s+/g,'').toUpperCase();}).filter(Boolean); }
 function cadoChkIso(i){
@@ -4684,7 +4729,9 @@ function cadoToggleGrp(i){ document.getElementById('cadoGrp'+i).classList.toggle
 function cadoSelAll(v){ for(var i=0;i<cadoNG;i++){ document.getElementById('cadoSel'+i).checked=v; cadoToggleGrp(i); } }
 function cadoCollect(sel){
   var out=[];
-  for(var i=0;i<cadoNG;i++){
+  var els=document.querySelectorAll('#cadoGroups .cado-grp');  /* เรียงตามลำดับบนจอ (กล่อง2 ต่อจากกล่อง1) */
+  for(var n=0;n<els.length;n++){
+    var i=+els[n].id.replace('cadoGrp','');
     if(sel && !document.getElementById('cadoSel'+i).checked) continue;
     var cs=cadoCtrsOf(i); if(!cs.length) continue;
     out.push({ p:document.getElementById('cadoP'+i).value.trim().toUpperCase(),
