@@ -3017,6 +3017,12 @@ function loadLoyRows(i){
 function saveLoyRows(i, rows){ localStorage.setItem(getLoyKey(i), JSON.stringify(rows)); }
 
 function getInvKey(i){ return SLOTS_KEY + '_inv_' + i; }
+/* ── Baseline: จำ vessel_plan ตอนเปิดเรือ (จาก DB) → ตอนเซฟเทียบว่ามีใครเพิ่มของหลังเราเปิดไหม (กันเซฟทับของหาย) ── */
+const BASE_KEY = SLOTS_KEY + '_baseline';
+function _vpKey(r){ return String(r.invoice_no||'').toUpperCase().startsWith('LOY-') ? 'B:'+String(r.bkg_no||'').trim() : 'I:'+String(r.invoice_no||'').trim().toUpperCase(); }
+function loadBaseline(){ try{ return JSON.parse(localStorage.getItem(BASE_KEY))||{}; }catch{ return {}; } }
+function setBaselineFor(vessel, date, rows){ const o=loadBaseline(); o[(vessel||'')+'|||'+String(date||'').substring(0,10)] = [...new Set((rows||[]).map(_vpKey))]; try{ localStorage.setItem(BASE_KEY, JSON.stringify(o)); }catch{} }
+function clearBaseline(){ try{ localStorage.removeItem(BASE_KEY); }catch{} }
 function loadInvDraft(i){
   try { return JSON.parse(localStorage.getItem(getInvKey(i))) || []; } catch{ return []; }
 }
@@ -3174,6 +3180,7 @@ async function renderExcelSheet(){
 
   // แยก inv กับ loy ใน JS
   const all   = data || [];
+  setBaselineFor(c.vessel, sailDateNorm, all);   // จำสภาพ DB ตอนเปิดเรือ → guard ตอนเซฟ
   console.log('[vessel_plan load] rows returned:', all.length, '| vessel:', c.vessel, '| date:', sailDateNorm);
   const invDb = all.filter(r => !(r.invoice_no||'').toUpperCase().startsWith('LOY-'));
   const loyDb = all.filter(r =>  (r.invoice_no||'').toUpperCase().startsWith('LOY-'));
@@ -4075,6 +4082,26 @@ async function saveAllDraft(){
     return;
   }
 
+  // ── B. GUARD: ก่อนลบยกเรือ เทียบ DB ปัจจุบัน vs baseline ตอนเปิด — ถ้ามีใครเพิ่มของหลังเราเปิด ให้หยุด (กันเซฟทับของหาย) ──
+  const _base = loadBaseline();
+  const _vds = [...new Set(payload.map(r => r.vessel_name+'|||'+String(r.sail_date).substring(0,10)))];
+  for(const vd of _vds){
+    if(!(vd in _base)) continue;                      // ไม่มี baseline (ไม่ได้เปิดสดรอบนี้) → ข้าม ไม่บล็อก
+    const [vn, sd] = vd.split('|||');
+    const { data: cur, error: curErr } = await sb.from('vessel_plan')
+      .select('invoice_no,bkg_no').eq('sheet_name','WEB').eq('vessel_name',vn).eq('sail_date',sd);
+    if(curErr) continue;                              // เช็ค DB ไม่ได้ → ไม่บล็อก (กันบันทึกไม่ได้เพราะเน็ต)
+    const baseSet = new Set(_base[vd]);
+    const mineSet = new Set(payload.filter(r => r.vessel_name===vn && String(r.sail_date).substring(0,10)===sd).map(_vpKey));
+    const added = (cur||[]).filter(r => { const k=_vpKey(r); return !mineSet.has(k) && !baseSet.has(k); });  // มีใน DB แต่เราไม่มี + ไม่เคยเห็นตอนเปิด = คนอื่นเพิ่ม
+    if(added.length){
+      const names = added.map(r => r.bkg_no || r.invoice_no).filter(Boolean);
+      showMsg('draftMsg', `⚠️ หยุดก่อน! เรือ ${vn} (${sd}) มี ${added.length} รายการใน DB ที่หน้านี้ยังไม่มี — น่าจะมีคนเพิ่มหลังคุณเปิดหน้า:\n${names.slice(0,8).join(', ')}${names.length>8?' …':''}\n\n👉 สลับแท็บออกแล้วกลับเข้า "จัดเรือ" ใหม่ (ดึงสดจาก DB) แล้วค่อยบันทึก — ยกเลิกการบันทึกแล้ว กันข้อมูลหาย`, 'error');
+      btn.disabled=false; btn.innerHTML='📋 บันทึก Draft ทั้ง 10 ลำ';
+      return;
+    }
+  }
+
   // ลบเฉพาะ vessel+date ที่มีข้อมูลใหม่ (ไม่แตะ vessel อื่นที่ไม่ได้แก้)
   const toDelete = [...new Set(payload.map(r => `${r.vessel_name}|||${r.sail_date}`))];
   for(const key of toDelete){
@@ -4197,6 +4224,7 @@ async function loadVessels(){
 /* เปิดหน้าจัดเรือทุกครั้ง → ล้าง draft ในเครื่อง แล้วดึงสดจาก DB (กันโหลดของเก่าแล้วเซฟทับงานใหม่) */
 async function reloadVesselFresh(){
   for(let i=0;i<SLOT_COUNT;i++){ localStorage.removeItem(getInvKey(i)); localStorage.removeItem(getLoyKey(i)); localStorage.removeItem(getDbSetKey(i)); }
+  clearBaseline();   // ล้าง baseline เก่าด้วย → เปิดเรือรอบนี้จะ snapshot ใหม่
   try{ await loadVessels(); }catch(e){ console.warn('reloadVesselFresh:', e); }
 }
 
