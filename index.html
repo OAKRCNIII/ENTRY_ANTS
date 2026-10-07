@@ -3270,8 +3270,8 @@ function _bkgAllPlanRows(){
   for(let i=0;i<SLOT_COUNT;i++){
     const c=configs[i]||{}; if(!c.vessel) continue;
     const sd=String(c.sailDate||'').substring(0,10);
-    loadInvDraft(i).forEach(r=>{ const b=String(r.bkg||'').trim(); if(b) map[b]={vessel:c.vessel,sailDate:sd,vol:Number(r.vol||0),label:'INV '+(r.inv||'-'),slot:i}; });
-    loadLoyRows(i).forEach(r=>{ const b=String(r.bkg||'').trim(); if(b) map[b]={vessel:c.vessel,sailDate:sd,vol:Number(r.vol||0),label:'ลอย',slot:i}; });
+    loadInvDraft(i).forEach(r=>{ const b=String(r.bkg||'').trim(); if(b) map[b]={vessel:c.vessel,sailDate:sd,vol:Number(r.vol||0),label:'INV '+(r.inv||'-'),inv:(r.inv||''),slot:i}; });
+    loadLoyRows(i).forEach(r=>{ const b=String(r.bkg||'').trim(); if(b) map[b]={vessel:c.vessel,sailDate:sd,vol:Number(r.vol||0),label:'ลอย',inv:'',slot:i}; });
   }
   return map;
 }
@@ -3287,6 +3287,7 @@ async function _bkgAiProcess(files){
   const results=[];
   for(let i=0;i<files.length;i++){
     const f=files[i];
+    const thumb=/^image\//.test(f.type)?URL.createObjectURL(f):'';
     _bkgAiProgress(i, files.length, f.name);
     try{
       const b64=await _fileToB64(f);
@@ -3295,7 +3296,7 @@ async function _bkgAiProcess(files){
       if(error) throw new Error(error.message||String(error));
       if(data && data.error) throw new Error(data.error);
       const bkg=String((data&&data.booking)||'').trim(), aiVsl=String((data&&data.vessel)||'').trim(), aiVol=Number((data&&data.vol)||0);
-      if(!data || !data.readable || !bkg){ results.push({file:f.name,st:'unreadable',bkg,vsl:aiVsl,vol:aiVol}); continue; }
+      if(!data || !data.readable || !bkg){ results.push({file:f.name,thumb,st:'unreadable',bkg,vsl:aiVsl,vol:aiVol}); continue; }
       const plan=planMap[bkg];
       // อัปรูป + upsert conf (เก็บทุกใบที่อ่านออก แม้ยังไม่เจอในแผน)
       const safe=bkg.replace(/[^0-9A-Za-z_-]/g,'_'); const path=`${safe}/${Date.now()}_${i}.${ext}`;
@@ -3308,8 +3309,8 @@ async function _bkgAiProcess(files){
       let st;
       if(!plan) st='notfound';
       else { const vOk=_normVsl(aiVsl)===_normVsl(plan.vessel); const volOk=aiVol===Number(plan.vol||0); st = vOk ? (volOk?'ok':'volmis') : 'vslmis'; }
-      results.push({file:f.name,st,bkg,vsl:aiVsl,vol:aiVol,plan});
-    }catch(e){ results.push({file:f.name,st:'error',err:String((e&&e.message)||e)}); }
+      results.push({file:f.name,thumb,st,bkg,vsl:aiVsl,vol:aiVol,plan});
+    }catch(e){ results.push({file:f.name,thumb,st:'error',err:String((e&&e.message)||e)}); }
   }
   await loadBkgConf(); _refreshPlannerTables();
   _bkgAiSummary(results);
@@ -3338,14 +3339,21 @@ function _bkgAiSummary(results){
   const body=document.getElementById('bkgAiBody'); if(!body) return;
   const summary=['ok','volmis','vslmis','notfound','unreadable','error'].filter(k=>cnt[k]).map(k=>`${META[k].i} ${META[k].t.split(' ')[0]} ${cnt[k]}`).join('　');
   const rows=results.map(r=>{ const m=META[r.st]||META.error;
+    const thumb = r.thumb
+      ? `<img src="${r.thumb}" style="width:48px;height:48px;object-fit:cover;border-radius:7px;border:1px solid #e2e8f0;flex:none;" alt="">`
+      : `<div style="width:48px;height:48px;border-radius:7px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:20px;flex:none;">📄</div>`;
+    const matched = r.plan ? (r.plan.inv?('INV '+r.plan.inv):'ลอย') : '—';
+    const matchColor = r.plan ? (r.st==='ok'?'#15803d':'#b45309') : '#94a3b8';
     const read = r.st==='error' ? `<div style="font-size:11px;color:#dc2626;">${woH(r.err||'')}</div>`
       : `<div style="font-size:11px;color:#475569;">ใบ: บุคกิ้ง <b>${woH(r.bkg||'-')}</b> · เรือ ${woH(r.vsl||'-')} · ${r.vol||0} ตู้</div>`;
-    const plan = r.plan ? `<div style="font-size:11px;color:${r.st==='ok'?'#15803d':'#b45309'};">แผน: เรือ ${woH(r.plan.vessel)} · ${r.plan.vol} ตู้ · ${woH(r.plan.label)}</div>` : '';
-    return `<div style="display:flex;gap:10px;padding:9px 2px;border-bottom:1px solid #f1f5f9;">
-      <div style="font-size:18px;line-height:1.2;">${m.i}</div>
+    const matchLine = (r.st==='error') ? '' :
+      `<div style="font-size:12px;font-weight:800;color:${matchColor};">↳ จับคู่ในระบบ: ${woH(matched)}${r.plan?` · เรือ ${woH(r.plan.vessel)} · ${r.plan.vol} ตู้`:''}</div>`;
+    return `<div style="display:flex;gap:10px;padding:9px 2px;border-bottom:1px solid #f1f5f9;align-items:flex-start;">
+      ${thumb}
+      <div style="font-size:16px;line-height:1.3;">${m.i}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:12.5px;font-weight:700;color:${m.c};">${m.t} <span style="font-weight:400;color:#94a3b8;">· ${woH(r.file||'')}</span></div>
-        ${read}${plan}
+        ${read}${matchLine}
       </div></div>`;
   }).join('');
   body.innerHTML=`<div style="font-size:13px;font-weight:800;color:#0f2a52;margin-bottom:4px;">อ่านทั้งหมด ${results.length} ใบ</div>
@@ -3353,15 +3361,15 @@ function _bkgAiSummary(results){
     ${rows}
     <button onclick="_bkgAiClose()" style="margin-top:14px;width:100%;padding:11px;border:none;border-radius:9px;background:#1a3a6b;color:#fff;font-weight:800;cursor:pointer;">เสร็จ</button>`;
 }
-function _bkgAiClose(){ const p=document.getElementById('bkgAiBg'); if(p)p.style.display='none'; }
+function _bkgAiClose(){ const p=document.getElementById('bkgAiBg'); if(!p)return; try{ p.querySelectorAll('img[src^="blob:"]').forEach(im=>URL.revokeObjectURL(im.src)); }catch(e){} p.style.display='none'; }
 
 // ── แกลเลอรีดูรูป BKG ทั้งเรือ — เปิดแบบพลิกแฟ้ม + หัวกำกับ INV/ลอย + เรือ ──
 let _bkgGal={items:[],idx:0,vessel:''};
 async function openBkgGallery(){
   const idx=currentVslIdx; const cur=loadSlotConfigs()[idx]||{};
   const items=[];
-  loadInvDraft(idx).forEach(r=>{ if(!r.bkg)return; const c=BKG_CONF[String(r.bkg).trim()]; if(c&&c.image_path) items.push({bkg:r.bkg,path:c.image_path,label:'INV '+(r.inv||'-')}); });
-  loadLoyRows(idx).forEach(r=>{ if(!r.bkg)return; const c=BKG_CONF[String(r.bkg).trim()]; if(c&&c.image_path) items.push({bkg:r.bkg,path:c.image_path,label:'ลอย'}); });
+  loadInvDraft(idx).forEach(r=>{ if(!r.bkg)return; const c=BKG_CONF[String(r.bkg).trim()]; if(c&&c.image_path) items.push({bkg:r.bkg,path:c.image_path,label:'INV '+(r.inv||'-'),inv:(r.inv||'')}); });
+  loadLoyRows(idx).forEach(r=>{ if(!r.bkg)return; const c=BKG_CONF[String(r.bkg).trim()]; if(c&&c.image_path) items.push({bkg:r.bkg,path:c.image_path,label:'ลอย',inv:''}); });
   if(!items.length){ alert('ยังไม่มีรูป BKG ที่อัปไว้ในเรือลำนี้ — อัปรูปก่อน (คลิก ❗ ที่ช่อง BKG)'); return; }
   try{
     const { data, error } = await sb.storage.from('bkg_confirmations').createSignedUrls(items.map(it=>it.path),600);
@@ -3378,7 +3386,10 @@ function _bkgGalShow(){
     <div id="bkgGalCover" style="transform-origin:left center;transition:transform .62s cubic-bezier(.34,1.32,.5,1),box-shadow .5s ease;transform:rotateY(-120deg) scale(.8);background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;">
       <div id="bkgGalCap" style="padding:12px 16px;background:#1a3a6b;color:#fff;font-weight:800;font-size:15px;line-height:1.3;"></div>
       <div style="background:#0f172a;display:flex;align-items:center;justify-content:center;overflow:auto;min-height:260px;max-height:72vh;">
-        <img id="bkgGalImg" style="max-width:100%;max-height:72vh;display:block;transition:transform .35s ease,opacity .3s ease;" alt="BKG">
+        <span id="bkgGalImgWrap" style="position:relative;display:inline-block;max-width:100%;line-height:0;">
+          <img id="bkgGalImg" style="max-width:100%;max-height:72vh;display:block;transition:transform .35s ease,opacity .3s ease;" alt="BKG">
+          <div id="bkgGalStamp" title="ลากเพื่อย้ายตำแหน่ง" style="position:absolute;display:none;transform:rotate(-5deg);background:rgba(255,255,255,.78);border:2.5px solid #dc2626;color:#b91c1c;font-weight:900;font-size:clamp(13px,2.2vw,20px);line-height:1.1;padding:3px 11px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.3);font-family:'Sarabun','Segoe UI',sans-serif;white-space:nowrap;letter-spacing:.5px;cursor:move;user-select:none;touch-action:none;z-index:3;"></div>
+        </span>
       </div>
       <div style="padding:10px 14px;display:flex;align-items:center;gap:10px;background:#f1f5f9;">
         <button onclick="_bkgGalGo(-1)" style="padding:8px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;font-weight:700;cursor:pointer;">← ก่อนหน้า</button>
@@ -3389,6 +3400,7 @@ function _bkgGalShow(){
     </div>
   </div>`;
   bg.style.transition='opacity .4s ease'; bg.style.opacity='0'; bg.style.display='flex';
+  _bkgStampDragInit();
   _bkgGalRender(0);
   requestAnimationFrame(()=>{ bg.style.opacity='1'; setTimeout(()=>{ const cv=document.getElementById('bkgGalCover'); if(cv){ cv.style.transform='rotateY(0deg) scale(1)'; cv.style.boxShadow='0 30px 90px rgba(0,0,0,.55)'; } },50); });
 }
@@ -3397,6 +3409,7 @@ function _bkgGalRender(dir){
   const cap=document.getElementById('bkgGalCap'), img=document.getElementById('bkgGalImg'), num=document.getElementById('bkgGalNum');
   if(cap) cap.innerHTML=`📎 ${woH(it.label)} <span style="opacity:.75;font-weight:600;font-size:12.5px;">· เรือ ${woH(g.vessel||'-')} · BKG ${woH(it.bkg)}</span>`;
   if(num) num.textContent=`${g.idx+1} / ${g.items.length}`;
+  _bkgStampApply(it);
   if(!img) return;
   if(dir){ img.style.opacity='0'; img.style.transform=`rotateY(${dir>0?-40:40}deg)`;
     setTimeout(()=>{ img.onload=()=>{ img.style.transform='rotateY(0)'; img.style.opacity='1'; }; img.src=it.url; },160);
@@ -3404,6 +3417,37 @@ function _bkgGalRender(dir){
 }
 function _bkgGalGo(d){ const g=_bkgGal, n=g.items.length; if(n<2){return;} g.idx=(g.idx+d+n)%n; _bkgGalRender(d); }
 function _bkgGalClose(){ const p=document.getElementById('bkgGalBg'); if(p) p.style.display='none'; }
+
+// ── กล่องปั๊มเลขอินวอยซ์ทับรูป (แทนลายมือ) — ลากย้ายได้ จำตำแหน่งต่อบุคกิ้งใน ai_note ──
+function _bkgStampPos(bkg){
+  const c=BKG_CONF[String(bkg||'').trim()];
+  try{ if(c&&c.ai_note){ const o=typeof c.ai_note==='string'?JSON.parse(c.ai_note):c.ai_note; if(o&&typeof o.sx==='number'&&typeof o.sy==='number') return {sx:o.sx,sy:o.sy}; } }catch(e){}
+  return {sx:.47, sy:.26};   // ค่าเริ่มต้น ~ ช่อง REMARK ของ OOCL
+}
+function _bkgStampApply(it){
+  const stamp=document.getElementById('bkgGalStamp'); if(!stamp) return;
+  if(it&&it.inv){ const p=_bkgStampPos(it.bkg); stamp.style.display='block'; stamp.style.left=(p.sx*100)+'%'; stamp.style.top=(p.sy*100)+'%'; stamp.textContent=it.inv; stamp.dataset.bkg=it.bkg; }
+  else { stamp.style.display='none'; stamp.dataset.bkg=''; }
+}
+let _bkgStampWired=false, _bkgStampDrag=false;
+function _bkgStampDragInit(){
+  if(_bkgStampWired) return; _bkgStampWired=true;
+  const gs=()=>document.getElementById('bkgGalStamp'), gw=()=>document.getElementById('bkgGalImgWrap');
+  const down=(e)=>{ const s=gs(); if(!s||s.style.display==='none'||e.target!==s) return; _bkgStampDrag=true; e.preventDefault(); };
+  const move=(e)=>{ if(!_bkgStampDrag)return; const s=gs(),w=gw(); if(!s||!w)return; const p=e.touches?e.touches[0]:e; const rc=w.getBoundingClientRect(); if(!rc.width||!rc.height)return;
+    let sx=(p.clientX-rc.left)/rc.width, sy=(p.clientY-rc.top)/rc.height; sx=Math.max(0,Math.min(.97,sx)); sy=Math.max(0,Math.min(.97,sy));
+    s.style.left=(sx*100)+'%'; s.style.top=(sy*100)+'%'; s.dataset.sx=sx; s.dataset.sy=sy; e.preventDefault(); };
+  const up=()=>{ if(!_bkgStampDrag)return; _bkgStampDrag=false; const s=gs(); if(!s)return; const bkg=s.dataset.bkg, sx=parseFloat(s.dataset.sx), sy=parseFloat(s.dataset.sy); if(bkg&&!isNaN(sx)&&!isNaN(sy)) _bkgStampSave(bkg,sx,sy); };
+  window.addEventListener('mousedown',down); window.addEventListener('touchstart',down,{passive:false});
+  window.addEventListener('mousemove',move);  window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',up);       window.addEventListener('touchend',up);
+}
+async function _bkgStampSave(bkg,sx,sy){
+  const b=String(bkg||'').trim(); if(!b)return;
+  const note=JSON.stringify({sx:+(+sx).toFixed(4), sy:+(+sy).toFixed(4)});
+  if(BKG_CONF[b]) BKG_CONF[b].ai_note=note;
+  try{ await sb.from('bkg_confirmations').update({ai_note:note}).eq('bkg_no',b); }catch(e){ console.warn('stamp save:',e.message); }
+}
 
 // ── Render Excel Sheet (async — โหลดจาก vessel_plan ถ้าไม่มี draft) ──
 async function renderExcelSheet(){
