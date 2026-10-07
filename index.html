@@ -3341,6 +3341,9 @@ function _bkgStageShow(){
       </div>
       <div id="bkgStageGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;"></div>
       <div id="bkgStageEmpty" style="text-align:center;color:#94a3b8;font-size:12.5px;padding:10px 0;">ยังไม่มีรูป — วางหรือเลือกไฟล์</div>
+      <div style="text-align:center;margin-top:10px;border-top:1px dashed #e2e8f0;padding-top:10px;">
+        <button onclick="_bkgStageClose();_bkgAiRescan()" style="padding:6px 14px;border:1px dashed #cbd5e1;background:#f8fafc;border-radius:8px;font-size:12px;color:#475569;cursor:pointer;">🔄 อ่านซ้ำใบที่อัปไว้แล้วในเรือลำนี้ (เติมเวอร์ชัน/แก้เรือ)</button>
+      </div>
     </div>
     <div style="padding:12px 16px;display:flex;gap:10px;background:#f1f5f9;align-items:center;">
       <span id="bkgStageCount" style="font-size:13px;font-weight:800;color:#475569;white-space:nowrap;">0 รูป</span>
@@ -3395,6 +3398,43 @@ function _bkgStageRun(){
   _bkgStage=[];
   const p=document.getElementById('bkgAiStageBg'); if(p)p.style.display='none';
   _bkgAiProcess(files);
+}
+// อ่านซ้ำใบที่อัปไว้แล้ว (ดึงรูปจาก storage) → เติม version + อัปเดตเรือ/ตู้ (แก้ T/S เก่า) โดยไม่ต้องอัปใหม่
+async function _bkgAiRescan(){
+  const idx=currentVslIdx; const seen=new Set(); const items=[];
+  const add=(b)=>{ b=String(b||'').trim(); if(!b||seen.has(b))return; const c=BKG_CONF[b]; if(c&&c.image_path){ seen.add(b); items.push({bkg:b, path:c.image_path}); } };
+  loadInvDraft(idx).forEach(r=>add(r.bkg)); loadLoyRows(idx).forEach(r=>add(r.bkg));
+  if(!items.length){ alert('เรือลำนี้ยังไม่มีรูป BKG ที่อัปไว้'); return; }
+  if(!confirm(`อ่านซ้ำ ${items.length} ใบจากรูปที่เก็บไว้ (เติมเวอร์ชัน + อัปเดตเรือ/จำนวนตู้)?`)) return;
+  _bkgAiShow(items.length);
+  const planMap=_bkgAllPlanRows(); const results=[];
+  for(let i=0;i<items.length;i++){
+    const it=items[i]; _bkgAiProgress(i, items.length, 'บุคกิ้ง '+it.bkg);
+    let thumb='';
+    try{
+      const s=await sb.storage.from('bkg_confirmations').createSignedUrl(it.path,600);
+      if(s.error||!s.data) throw new Error('โหลดรูปไม่ได้');
+      const blob=await (await fetch(s.data.signedUrl)).blob();
+      thumb=/^image\//.test(blob.type)?URL.createObjectURL(blob):'';
+      const b64=await _fileToB64(blob);
+      const ext=(it.path.split('.').pop()||'jpg').toLowerCase();
+      const { data, error } = await sb.functions.invoke('bkg-ai', { body:{ image_b64:b64, ext } });
+      if(error) throw new Error(error.message||String(error));
+      if(data && data.error) throw new Error(data.error);
+      const aiVsl=String((data&&data.vessel)||'').trim(), aiVol=Number((data&&data.vol)||0), aiVer=String((data&&data.version)||'').trim();
+      if(!data || !data.readable){ results.push({file:it.bkg,thumb,st:'unreadable',bkg:it.bkg,vsl:aiVsl,vol:aiVol,ver:aiVer}); continue; }
+      const plan=planMap[it.bkg];
+      const _pn=_bkgNote(it.bkg)||{}; const _note=JSON.stringify({..._pn, ...(aiVer?{v:aiVer}:{})});
+      const upd={ vessel_name:aiVsl, ai_vessel:aiVsl, ai_vol:aiVol, ai_note:_note, sail_date:(plan?plan.sailDate:null)||null, updated_at:new Date().toISOString() };
+      const r2=await sb.from('bkg_confirmations').update(upd).eq('bkg_no', it.bkg);
+      if(r2.error) throw r2.error;
+      _queueBookingEvent({ booking_no:it.bkg, event_type:'bkg_confirm', to_vessel:aiVsl, vol:aiVol, detail:`อ่านซ้ำ BKG${aiVer?(' v'+aiVer):''} · เรือ ${aiVsl||'-'} · ${aiVol} ตู้` });
+      let st; if(!plan) st='notfound'; else { const vOk=_normVsl(aiVsl)===_normVsl(plan.vessel); const volOk=aiVol===Number(plan.vol||0); st=vOk?(volOk?'ok':'volmis'):'vslmis'; }
+      results.push({file:it.bkg,thumb,st,bkg:it.bkg,vsl:aiVsl,vol:aiVol,ver:aiVer,plan});
+    }catch(e){ results.push({file:it.bkg,thumb,st:'error',err:String((e&&e.message)||e)}); }
+  }
+  await loadBkgConf(); _refreshPlannerTables(); await _flushBookingEvents();
+  _bkgAiSummary(results);
 }
 async function _bkgAiProcess(files){
   const planMap=_bkgAllPlanRows();
