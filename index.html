@@ -3543,8 +3543,8 @@ let _bkgGal={items:[],idx:0,vessel:''};
 async function openBkgGallery(){
   const idx=currentVslIdx; const cur=loadSlotConfigs()[idx]||{};
   const items=[];
-  loadInvDraft(idx).forEach(r=>{ if(!r.bkg)return; const c=BKG_CONF[String(r.bkg).trim()]; if(c&&c.image_path) items.push({bkg:r.bkg,path:c.image_path,label:'INV '+(r.inv||'-'),inv:(r.inv||'')}); });
-  loadLoyRows(idx).forEach(r=>{ if(!r.bkg)return; const c=BKG_CONF[String(r.bkg).trim()]; if(c&&c.image_path) items.push({bkg:r.bkg,path:c.image_path,label:'ลอย',inv:''}); });
+  loadInvDraft(idx).forEach(r=>{ if(!r.bkg)return; const c=BKG_CONF[String(r.bkg).trim()]; if(c&&c.image_path) items.push({bkg:r.bkg,path:c.image_path,label:'INV '+(r.inv||'-'),inv:(r.inv||''),vol:(r.vol||'')}); });
+  loadLoyRows(idx).forEach(r=>{ if(!r.bkg)return; const c=BKG_CONF[String(r.bkg).trim()]; if(c&&c.image_path) items.push({bkg:r.bkg,path:c.image_path,label:'ลอย',inv:'',vol:(r.vol||'')}); });
   if(!items.length){ alert('ยังไม่มีรูป BKG ที่อัปไว้ในเรือลำนี้ — อัปรูปก่อน (คลิก ❗ ที่ช่อง BKG)'); return; }
   try{
     const { data, error } = await sb.storage.from('bkg_confirmations').createSignedUrls(items.map(it=>it.path),600);
@@ -3609,19 +3609,24 @@ function _bkgViewOne(idx){
   _bkgGal.idx=idx||0;
   let bg=document.getElementById('bkgViewBg');
   if(!bg){ bg=document.createElement('div'); bg.id='bkgViewBg'; bg.style.cssText='position:fixed;inset:0;background:rgba(8,12,24,.86);display:flex;align-items:center;justify-content:center;z-index:100005;'; bg.onclick=e=>{if(e.target===bg)_bkgViewClose();}; document.body.appendChild(bg); }
-  bg.innerHTML=`<div style="perspective:1800px;width:min(820px,94vw);">
+  bg.innerHTML=`<div style="width:min(1180px,97vw);">
     <div id="bkgGalCover" style="transition:opacity .22s ease,box-shadow .4s ease;opacity:0;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.45);overflow:hidden;display:flex;flex-direction:column;">
       <div id="bkgGalCap" style="padding:12px 16px;background:#1a3a6b;color:#fff;font-weight:800;font-size:15px;line-height:1.3;"></div>
-      <div style="background:#0f172a;display:flex;align-items:center;justify-content:center;overflow:auto;min-height:260px;max-height:72vh;">
+      <div id="bkgGalScroll" style="background:#0f172a;display:flex;align-items:flex-start;justify-content:center;overflow:auto;min-height:300px;max-height:84vh;">
         <span id="bkgGalImgWrap" style="position:relative;display:inline-block;max-width:100%;line-height:0;">
-          <img id="bkgGalImg" style="max-width:100%;max-height:72vh;display:block;transition:transform .35s ease,opacity .3s ease;" alt="BKG">
+          <img id="bkgGalImg" ondblclick="_bkgViewZoom('toggle')" title="ดับเบิลคลิกเพื่อซูม" style="max-width:100%;max-height:84vh;display:block;transition:opacity .3s ease;cursor:zoom-in;" alt="BKG">
           <div id="bkgGalStamp" title="ลากเพื่อย้ายตำแหน่ง" style="position:absolute;display:none;transform:rotate(-5deg);background:rgba(255,255,255,.78);border:2.5px solid #dc2626;color:#b91c1c;font-weight:900;font-size:clamp(13px,2.2vw,20px);line-height:1.1;padding:3px 11px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.3);font-family:'Sarabun','Segoe UI',sans-serif;white-space:nowrap;letter-spacing:.5px;cursor:move;user-select:none;touch-action:none;z-index:3;"></div>
         </span>
       </div>
-      <div style="padding:10px 14px;display:flex;align-items:center;gap:10px;background:#f1f5f9;">
-        <button onclick="_bkgGalGo(-1)" style="padding:8px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;font-weight:700;cursor:pointer;">← ก่อนหน้า</button>
+      <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;background:#f1f5f9;flex-wrap:wrap;">
+        <button onclick="_bkgViewZoom('out')" title="ซูมออก" style="padding:7px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-weight:800;cursor:pointer;">🔍−</button>
+        <span id="bkgVZlbl" style="font-size:12px;font-weight:800;color:#475569;min-width:44px;text-align:center;">100%</span>
+        <button onclick="_bkgViewZoom('in')" title="ซูมเข้า" style="padding:7px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-weight:800;cursor:pointer;">🔍+</button>
+        <button onclick="_bkgViewZoom('reset')" style="padding:7px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-weight:700;color:#64748b;cursor:pointer;">รีเซ็ต</button>
+        <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px;"></span>
+        <button onclick="_bkgGalGo(-1)" style="padding:8px 14px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;font-weight:700;cursor:pointer;">←</button>
         <span id="bkgGalNum" style="font-size:13px;font-weight:800;color:#475569;"></span>
-        <button onclick="_bkgGalGo(1)" style="padding:8px 16px;border:1px solid #1a3a6b;border-radius:9px;background:#1a3a6b;color:#fff;font-weight:700;cursor:pointer;">ใบต่อไป →</button>
+        <button onclick="_bkgGalGo(1)" style="padding:8px 14px;border:1px solid #1a3a6b;border-radius:9px;background:#1a3a6b;color:#fff;font-weight:700;cursor:pointer;">→</button>
         <button onclick="_bkgViewClose()" style="margin-left:auto;padding:8px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#64748b;font-weight:700;cursor:pointer;">✕ กลับแฟ้ม</button>
       </div>
     </div>
@@ -3632,16 +3637,36 @@ function _bkgViewOne(idx){
   requestAnimationFrame(()=>{ const cv=document.getElementById('bkgGalCover'); if(cv){ cv.style.opacity='1'; cv.style.boxShadow='0 30px 90px rgba(0,0,0,.55)'; } });
 }
 function _bkgViewClose(){ const p=document.getElementById('bkgViewBg'); if(p) p.style.display='none'; }
+/* ซูมรูปในวิวเดี่ยว — เปลี่ยนขนาดจริง (wrap) ให้เลื่อนดูได้ กล่องปั๊ม(%)ตามอัตโนมัติ */
+let _bkgVZ=1;
+function _bkgViewZoom(set){
+  const sc=document.getElementById('bkgGalScroll'), wrap=document.getElementById('bkgGalImgWrap'), img=document.getElementById('bkgGalImg');
+  if(!sc||!wrap||!img) return;
+  if(set==='reset') _bkgVZ=1;
+  else if(set==='in') _bkgVZ=Math.min(4,Math.round((_bkgVZ+0.5)*10)/10);
+  else if(set==='out') _bkgVZ=Math.max(1,Math.round((_bkgVZ-0.5)*10)/10);
+  else if(set==='toggle') _bkgVZ=_bkgVZ>1?1:2;
+  if(_bkgVZ<=1){
+    sc.style.display='flex'; wrap.style.width='';
+    img.style.maxWidth='100%'; img.style.maxHeight='84vh'; img.style.width='auto';
+    img.style.cursor='zoom-in';
+  } else {
+    sc.style.display='block';
+    img.style.maxWidth='none'; img.style.maxHeight='none'; img.style.width='100%'; img.style.cursor='zoom-out';
+    wrap.style.width=((sc.clientWidth-18)*_bkgVZ)+'px';
+  }
+  const lbl=document.getElementById('bkgVZlbl'); if(lbl) lbl.textContent=Math.round(_bkgVZ*100)+'%';
+}
 function _bkgGalRender(dir){
   const g=_bkgGal, it=g.items[g.idx]; if(!it)return;
   const cap=document.getElementById('bkgGalCap'), img=document.getElementById('bkgGalImg'), num=document.getElementById('bkgGalNum');
-  if(cap) cap.innerHTML=`📎 ${woH(it.label)} <span style="opacity:.75;font-weight:600;font-size:12.5px;">· เรือ ${woH(g.vessel||'-')} · BKG ${woH(it.bkg)}</span>`;
+  if(cap) cap.innerHTML=`📎 ${woH(it.label)} <span style="opacity:.8;font-weight:600;font-size:12.5px;">· เรือ ${woH(g.vessel||'-')} · BKG ${woH(it.bkg)}${it.vol?' · '+woH(String(it.vol))+' ตู้':''}</span>`;
   if(num) num.textContent=`${g.idx+1} / ${g.items.length}`;
   _bkgStampApply(it);
+  if(document.getElementById('bkgGalScroll')) _bkgViewZoom('reset');
   if(!img) return;
-  if(dir){ img.style.opacity='0'; img.style.transform=`rotateY(${dir>0?-40:40}deg)`;
-    setTimeout(()=>{ img.onload=()=>{ img.style.transform='rotateY(0)'; img.style.opacity='1'; }; img.src=it.url; },160);
-  }else{ img.onload=()=>{ img.style.opacity='1'; }; img.style.transform='rotateY(0)'; img.src=it.url; }
+  if(dir){ img.style.opacity='0'; setTimeout(()=>{ img.onload=()=>{ img.style.opacity='1'; }; img.src=it.url; },120); }
+  else { img.onload=()=>{ img.style.opacity='1'; }; img.src=it.url; }
 }
 function _bkgGalGo(d){ const g=_bkgGal, n=g.items.length; if(n<2){return;} g.idx=(g.idx+d+n)%n; _bkgGalRender(d); }
 function _bkgGalClose(){ ['bkgZoomBg','bkgViewBg','bkgGalBg'].forEach(id=>{ const p=document.getElementById(id); if(p) p.style.display='none'; }); }
