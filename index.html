@@ -3306,10 +3306,81 @@ async function _bkgExpandFiles(files){
   }
   return out;
 }
+// ── ถาดรวมรูป: วาง (Ctrl+V) / ลากวาง / เลือกไฟล์ สะสมหลายรูป แล้วกดทีเดียว ──
+let _bkgStage=[], _bkgPasteHandler=null;
 function _bkgAiUpload(){
+  _bkgStage=[];
+  _bkgStageShow();
+  _bkgPasteHandler=(e)=>_bkgStagePaste(e);
+  document.addEventListener('paste', _bkgPasteHandler);
+}
+function _bkgStageShow(){
+  let bg=document.getElementById('bkgAiStageBg');
+  if(!bg){ bg=document.createElement('div'); bg.id='bkgAiStageBg'; bg.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.84);display:flex;align-items:center;justify-content:center;z-index:100002;'; bg.onclick=e=>{if(e.target===bg)_bkgStageClose();}; document.body.appendChild(bg); }
+  bg.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;width:min(620px,95vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(0,0,0,.5);">
+    <div style="padding:14px 18px;background:#047857;color:#fff;font-weight:800;font-size:15px;">🤖 อัป BKG — วางรูปสะสม แล้วให้ AI อ่านทีเดียว</div>
+    <div style="padding:14px 18px;overflow:auto;">
+      <div id="bkgStageDrop" ondragover="event.preventDefault();this.style.background='#dcfce7';" ondragleave="this.style.background='#f0fdf4';" ondrop="_bkgStageDrop(event)" style="border:2px dashed #6ee7b7;background:#f0fdf4;border-radius:12px;padding:18px;text-align:center;color:#047857;font-size:13px;font-weight:700;margin-bottom:12px;">
+        📋 วางรูปที่นี่ได้เลย (Ctrl+V) — วางหลายรอบ/ลากวางก็ได้<br>
+        <span style="font-weight:400;color:#475569;font-size:12px;">หรือ</span>
+        <button onclick="_bkgStagePick()" style="margin-top:8px;display:inline-block;padding:7px 16px;border:1px solid #10b981;background:#fff;border-radius:9px;font-weight:700;color:#047857;cursor:pointer;">📁 เลือกรูป/PDF</button>
+      </div>
+      <div id="bkgStageGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;"></div>
+      <div id="bkgStageEmpty" style="text-align:center;color:#94a3b8;font-size:12.5px;padding:10px 0;">ยังไม่มีรูป — วางหรือเลือกไฟล์</div>
+    </div>
+    <div style="padding:12px 16px;display:flex;gap:10px;background:#f1f5f9;align-items:center;">
+      <span id="bkgStageCount" style="font-size:13px;font-weight:800;color:#475569;white-space:nowrap;">0 รูป</span>
+      <button id="bkgStageRunBtn" onclick="_bkgStageRun()" disabled style="flex:1;padding:11px;border:none;border-radius:9px;background:#9ca3af;color:#fff;font-weight:800;cursor:not-allowed;">🤖 ให้ AI อ่านทั้งหมด</button>
+      <button onclick="_bkgStageClose()" style="padding:11px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#64748b;font-weight:700;cursor:pointer;">ยกเลิก</button>
+    </div>
+  </div>`;
+  bg.style.display='flex';
+  _bkgStageRender();
+}
+function _bkgStagePick(){
   const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf'; inp.multiple=true;
-  inp.onchange=()=>{ const files=[...(inp.files||[])]; if(files.length) _bkgAiProcess(files); };
+  inp.onchange=()=>_bkgStageAdd([...(inp.files||[])]);
   inp.click();
+}
+function _bkgStageDrop(e){ e.preventDefault(); const d=e.dataTransfer; const el=document.getElementById('bkgStageDrop'); if(el)el.style.background='#f0fdf4';
+  if(d&&d.files&&d.files.length) _bkgStageAdd([...d.files].filter(f=>/^image\//.test(f.type)||f.type==='application/pdf')); }
+function _bkgStagePaste(e){
+  const dt=e.clipboardData; if(!dt) return; const files=[];
+  if(dt.files && dt.files.length){ [...dt.files].forEach(f=>{ if(/^image\//.test(f.type)||f.type==='application/pdf') files.push(f); }); }
+  else if(dt.items){ [...dt.items].forEach(it=>{ if(it.kind==='file'){ const f=it.getAsFile(); if(f&&(/^image\//.test(f.type)||f.type==='application/pdf')) files.push(f); } }); }
+  if(files.length){ e.preventDefault(); _bkgStageAdd(files); }
+}
+function _bkgStageAdd(files){
+  (files||[]).forEach(f=>{ if(!f)return;
+    let file=f;
+    if(!f.name){ const ext=f.type==='application/pdf'?'pdf':'png'; file=new File([f],`วาง-${_bkgStage.length+1}.${ext}`,{type:f.type||'image/png'}); }
+    const url=/^image\//.test(file.type)?URL.createObjectURL(file):'';
+    _bkgStage.push({file, url});
+  });
+  _bkgStageRender();
+}
+function _bkgStageRemove(idx){ const s=_bkgStage[idx]; if(s&&s.url){try{URL.revokeObjectURL(s.url);}catch(e){}} _bkgStage.splice(idx,1); _bkgStageRender(); }
+function _bkgStageRender(){
+  const grid=document.getElementById('bkgStageGrid'), empty=document.getElementById('bkgStageEmpty'), cnt=document.getElementById('bkgStageCount'), btn=document.getElementById('bkgStageRunBtn');
+  if(!grid)return;
+  grid.innerHTML=_bkgStage.map((s,i)=>{
+    const vis = s.url ? `<img src="${s.url}" style="width:100%;height:92px;object-fit:cover;display:block;">` : `<div style="height:92px;display:flex;align-items:center;justify-content:center;font-size:26px;background:#eef2ff;">📄</div>`;
+    return `<div style="position:relative;border:1px solid #e2e8f0;border-radius:9px;overflow:hidden;">${vis}<button onclick="_bkgStageRemove(${i})" title="เอาออก" style="position:absolute;top:3px;right:3px;width:20px;height:20px;border:none;border-radius:50%;background:rgba(220,38,38,.92);color:#fff;font-size:12px;font-weight:800;cursor:pointer;line-height:1;padding:0;">✕</button></div>`;
+  }).join('');
+  if(empty) empty.style.display=_bkgStage.length?'none':'block';
+  if(cnt) cnt.textContent=_bkgStage.length+' รูป';
+  if(btn){ const on=_bkgStage.length>0; btn.disabled=!on; btn.style.background=on?'#047857':'#9ca3af'; btn.style.cursor=on?'pointer':'not-allowed'; btn.textContent='🤖 ให้ AI อ่านทั้งหมด'+(on?` (${_bkgStage.length})`:''); }
+}
+function _bkgStageCleanup(){ if(_bkgPasteHandler){ document.removeEventListener('paste',_bkgPasteHandler); _bkgPasteHandler=null; } }
+function _bkgStageClose(){ _bkgStageCleanup(); _bkgStage.forEach(s=>{ if(s.url){try{URL.revokeObjectURL(s.url);}catch(e){}} }); _bkgStage=[]; const p=document.getElementById('bkgAiStageBg'); if(p)p.style.display='none'; }
+function _bkgStageRun(){
+  if(!_bkgStage.length) return;
+  _bkgStageCleanup();
+  const files=_bkgStage.map(s=>s.file);
+  _bkgStage.forEach(s=>{ if(s.url){try{URL.revokeObjectURL(s.url);}catch(e){}} });
+  _bkgStage=[];
+  const p=document.getElementById('bkgAiStageBg'); if(p)p.style.display='none';
+  _bkgAiProcess(files);
 }
 async function _bkgAiProcess(files){
   const planMap=_bkgAllPlanRows();
