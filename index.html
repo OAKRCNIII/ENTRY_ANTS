@@ -488,6 +488,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
         <button class="vsl-cfg-btn" id="vslCfgBtn" onclick="saveVslCfg()">💾 บันทึก config เรือ</button>
         <button class="vsl-draft-btn" id="vslDraftBtn" onclick="saveAllDraft()">📋 บันทึก Draft ทั้ง 10 ลำ</button>
         <button type="button" onclick="openBkgHistory('')" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:700;color:#0f2a52;cursor:pointer;white-space:nowrap;">📜 ประวัติบุคกิ้ง</button>
+        <button type="button" onclick="_bkgAiUpload()" style="padding:7px 14px;border:1px solid #6ee7b7;background:#ecfdf5;border-radius:9px;font-size:13px;font-weight:700;color:#047857;cursor:pointer;white-space:nowrap;">🤖 อัป BKG (AI จับคู่)</button>
         <button type="button" onclick="openBkgGallery()" style="padding:7px 14px;border:1px solid #93c5fd;background:#eff6ff;border-radius:9px;font-size:13px;font-weight:700;color:#1d4ed8;cursor:pointer;white-space:nowrap;">📂 ดูรูป BKG ทั้งหมด</button>
         <button type="button" onclick="printVesselReport()" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:700;color:#0f2a52;cursor:pointer;white-space:nowrap;">🖨️ พิมพ์รีพอร์ต</button>
       </div>
@@ -3111,7 +3112,7 @@ function buildInvTableHtml(c, dbRows){
       <td class="xls-rn">${r+1}</td>
       <td style="position:relative;${_invBorder}"><input id="xi_inv_${r}" type="text" value="${h(d.invoice_no||'')}" readonly tabindex="-1" style="${_ro}${_invPadL}${_paidOCF?'padding-right:56px;':''}">${_stBadge}${_ocfBadge}</td>
       <td><input id="xi_des_${r}" type="text" value="${h(d.destination||'')}" readonly tabindex="-1" style="${_ro}color:#334155;"></td>
-      <td style="position:relative;"><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}padding-left:20px;">${d.booking_no?_bkgIcon(d.booking_no):''}</td>
+      <td style="position:relative;"><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}padding-left:20px;">${d.booking_no?_bkgIcon(d.booking_no,d.container_count):''}</td>
       <td><input id="xi_vol_${r}" type="text" value="${d.container_count||''}" readonly tabindex="-1" style="${_ro}text-align:center;"></td>
       <td style="white-space:nowrap;">${(d.invoice_no||d.booking_no)?`<button type="button" onclick="reviseInv(${r})" title="ย้ายทั้งอินวอยซ์ (+BKG) ไปเรืออื่น" style="font-size:12px;padding:1px 5px;border:1px solid #93c5fd;background:#eff6ff;border-radius:6px;cursor:pointer;margin-right:3px;">↪</button><button class="xci-del" onclick="clearInvRow(${r})" title="เอาบุคกิ้งกลับเป็นลอย">✕</button>`:''}</td>
     </tr>`;
@@ -3125,7 +3126,7 @@ function buildLoyTableHtml(loyData){
     const ld = loyData[r] || {};
     lhtml += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:20px;padding-right:20px;">${ld.bkg?_bkgIcon(ld.bkg):''}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
+      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:20px;padding-right:20px;">${ld.bkg?_bkgIcon(ld.bkg,ld.vol):''}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
       <td><input id="xl_vol_${r}" type="text" value="${ld.vol||''}" readonly tabindex="-1" style="${_lro}text-align:center;"></td>
       <td><input id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" readonly tabindex="-1" style="${_lro}"></td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่อินวอยซ์" style="font-size:13px;padding:1px 5px;border:1px solid #86efac;background:#f0fdf4;border-radius:6px;cursor:pointer;">🔗</button>`:''}</td>
@@ -3143,7 +3144,7 @@ let BKG_CONF = {};   /* bkg_no(trim) → {vessel_name, sail_date, image_path, st
 async function loadBkgConf(){
   try{
     const { data, error } = await sb.from('bkg_confirmations')
-      .select('bkg_no,vessel_name,sail_date,image_path,status');
+      .select('bkg_no,vessel_name,sail_date,image_path,status,ai_vessel,ai_bkg,ai_vol');
     if(error) throw error;
     BKG_CONF = {};
     (data||[]).forEach(r=>{ BKG_CONF[String(r.bkg_no||'').trim()] = r; });
@@ -3159,16 +3160,26 @@ async function invalidateBkgConf(bkg){
     await sb.from('bkg_confirmations').delete().eq('bkg_no', b);
   }catch(e){ console.warn('invalidateBkgConf:', e.message); }
 }
-/* ไอคอนสถานะต่อบุคกิ้ง: ไม่มีรูป=❗ · ยืนยันตรงเรือนี้=✅ · เคยยืนยันเรืออื่น(ย้าย/split)=🔄 */
-function _bkgIcon(bkg){
+/* normalize ชื่อเรือ: ตัดช่องว่าง/อักขระพิเศษ + ตัวพิมพ์ใหญ่ → เทียบ 'OOCL SAVANNAH 475N' กับ 'ooclsavannah475n' ได้ */
+function _normVsl(v){ return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+/* ไอคอนสถานะต่อบุคกิ้ง (เช็ค 3 อย่าง: บุคกิ้ง+เรือ+จำนวนตู้):
+   ❗ ไม่มีรูป · ✅ ครบตรงหมด · 🔄 เรือไม่ตรง/ย้ายเรือ ต้องอัปใหม่ · ⚠️ เรือตรงแต่จำนวนตู้ไม่ตรงใบ */
+function _bkgIcon(bkg, planVol){
   const b=String(bkg||'').trim(); if(!b) return '';
   const cur=loadSlotConfigs()[currentVslIdx]||{};
   const conf=BKG_CONF[b];
-  let ico;
-  if(!conf) ico='❗';
-  else if((conf.vessel_name||'')===(cur.vessel||'') && String(conf.sail_date||'').substring(0,10)===String(cur.sailDate||'').substring(0,10)) ico='✅';
-  else ico='🔄';
-  return `<span onclick="bkgConfClick('${b.replace(/['"\\]/g,'')}')" title="รูป BKG confirmation" style="position:absolute;left:3px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:11px;line-height:1;z-index:2;">${ico}</span>`;
+  let ico, tip;
+  if(!conf){ ico='❗'; tip='ยังไม่มีรูป BKG confirmation'; }
+  else {
+    const vslOk = _normVsl(conf.vessel_name)===_normVsl(cur.vessel)
+               && String(conf.sail_date||'').substring(0,10)===String(cur.sailDate||'').substring(0,10);
+    const haveAiVol = conf.ai_vol!=null && conf.ai_vol!=='';
+    const volOk = !haveAiVol || Number(conf.ai_vol)===Number(planVol||0);
+    if(!vslOk){ ico='🔄'; tip='เรือในใบ BKG ไม่ตรงเรือลำนี้ ('+(conf.ai_vessel||conf.vessel_name||'-')+') — ย้าย/อัปใหม่'; }
+    else if(!volOk){ ico='⚠️'; tip='จำนวนตู้ไม่ตรง: ใบ BKG ว่า '+conf.ai_vol+' แต่แผนมี '+(planVol||0); }
+    else { ico='✅'; tip='ยืนยันครบ — บุคกิ้ง/เรือ/จำนวนตู้ตรง'; }
+  }
+  return `<span onclick="bkgConfClick('${b.replace(/['"\\]/g,'')}')" title="${woH(tip)}" style="position:absolute;left:3px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:11px;line-height:1;z-index:2;">${ico}</span>`;
 }
 function _bkgPopupClose(){ const p=document.getElementById('bkgConfPop'); if(p)p.style.display='none'; }
 function bkgConfClick(bkg){
@@ -3251,6 +3262,98 @@ async function _doBkgView(bkg){
   try{ const s=await sb.storage.from('bkg_confirmations').createSignedUrl(conf.image_path,600); if(s.error)throw s.error; window.open(s.data.signedUrl,'_blank'); }
   catch(e){ alert('เปิดรูปไม่ได้: '+(e.message||e)); }
 }
+
+// ═══ AI จับคู่ BKG อัตโนมัติ — อัปทีเดียวหลายใบ AI อ่านบุคกิ้ง/เรือ/จำนวนตู้ แล้วจับคู่เอง ═══
+/* รวมทุกแถวที่มีบุคกิ้งจากทุกลำ (bkg → {vessel,sailDate,vol,label,slot}) ไว้ให้ AI จับคู่ */
+function _bkgAllPlanRows(){
+  const configs=loadSlotConfigs(); const map={};
+  for(let i=0;i<SLOT_COUNT;i++){
+    const c=configs[i]||{}; if(!c.vessel) continue;
+    const sd=String(c.sailDate||'').substring(0,10);
+    loadInvDraft(i).forEach(r=>{ const b=String(r.bkg||'').trim(); if(b) map[b]={vessel:c.vessel,sailDate:sd,vol:Number(r.vol||0),label:'INV '+(r.inv||'-'),slot:i}; });
+    loadLoyRows(i).forEach(r=>{ const b=String(r.bkg||'').trim(); if(b) map[b]={vessel:c.vessel,sailDate:sd,vol:Number(r.vol||0),label:'ลอย',slot:i}; });
+  }
+  return map;
+}
+function _fileToB64(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>{ const s=String(fr.result||''); res(s.slice(s.indexOf(',')+1)); }; fr.onerror=()=>rej(new Error('อ่านไฟล์ไม่ได้')); fr.readAsDataURL(file); }); }
+function _bkgAiUpload(){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf'; inp.multiple=true;
+  inp.onchange=()=>{ const files=[...(inp.files||[])]; if(files.length) _bkgAiProcess(files); };
+  inp.click();
+}
+async function _bkgAiProcess(files){
+  const planMap=_bkgAllPlanRows();
+  _bkgAiShow(files.length);
+  const results=[];
+  for(let i=0;i<files.length;i++){
+    const f=files[i];
+    _bkgAiProgress(i, files.length, f.name);
+    try{
+      const b64=await _fileToB64(f);
+      const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
+      const { data, error } = await sb.functions.invoke('bkg-ai', { body:{ image_b64:b64, ext } });
+      if(error) throw new Error(error.message||String(error));
+      if(data && data.error) throw new Error(data.error);
+      const bkg=String((data&&data.booking)||'').trim(), aiVsl=String((data&&data.vessel)||'').trim(), aiVol=Number((data&&data.vol)||0);
+      if(!data || !data.readable || !bkg){ results.push({file:f.name,st:'unreadable',bkg,vsl:aiVsl,vol:aiVol}); continue; }
+      const plan=planMap[bkg];
+      // อัปรูป + upsert conf (เก็บทุกใบที่อ่านออก แม้ยังไม่เจอในแผน)
+      const safe=bkg.replace(/[^0-9A-Za-z_-]/g,'_'); const path=`${safe}/${Date.now()}_${i}.${ext}`;
+      const up=await sb.storage.from('bkg_confirmations').upload(path,f,{upsert:true,contentType:f.type||undefined});
+      if(up.error) throw up.error;
+      const row={ bkg_no:bkg, vessel_name:aiVsl, sail_date:(plan?plan.sailDate:null)||null, image_path:path,
+                  status:'ai', ai_vessel:aiVsl, ai_bkg:bkg, ai_vol:aiVol, updated_at:new Date().toISOString() };
+      const ins=await sb.from('bkg_confirmations').upsert(row,{onConflict:'bkg_no'});
+      if(ins.error) throw ins.error;
+      let st;
+      if(!plan) st='notfound';
+      else { const vOk=_normVsl(aiVsl)===_normVsl(plan.vessel); const volOk=aiVol===Number(plan.vol||0); st = vOk ? (volOk?'ok':'volmis') : 'vslmis'; }
+      results.push({file:f.name,st,bkg,vsl:aiVsl,vol:aiVol,plan});
+    }catch(e){ results.push({file:f.name,st:'error',err:String((e&&e.message)||e)}); }
+  }
+  await loadBkgConf(); _refreshPlannerTables();
+  _bkgAiSummary(results);
+}
+function _bkgAiShow(total){
+  let bg=document.getElementById('bkgAiBg');
+  if(!bg){ bg=document.createElement('div'); bg.id='bkgAiBg'; bg.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.84);display:flex;align-items:center;justify-content:center;z-index:100002;'; document.body.appendChild(bg); }
+  bg.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;width:min(560px,94vw);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(0,0,0,.5);">
+    <div style="padding:14px 18px;background:#047857;color:#fff;font-weight:800;font-size:15px;">🤖 AI อ่านใบ BKG แล้วจับคู่ให้เอง</div>
+    <div id="bkgAiBody" style="padding:18px;overflow:auto;">
+      <div id="bkgAiProg" style="font-size:13px;color:#334155;">กำลังเริ่ม... (0/${total})</div>
+      <div style="height:8px;background:#e2e8f0;border-radius:6px;margin-top:10px;overflow:hidden;"><div id="bkgAiBar" style="height:100%;width:0;background:#10b981;transition:width .2s;"></div></div>
+    </div>
+  </div>`;
+  bg.style.display='flex';
+}
+function _bkgAiProgress(done,total,name){
+  const p=document.getElementById('bkgAiProg'); if(p) p.innerHTML=`⏳ กำลังอ่าน ${done+1}/${total}<br><span style="color:#64748b;font-size:12px;">${woH(name||'')}</span>`;
+  const bar=document.getElementById('bkgAiBar'); if(bar) bar.style.width=Math.round(done/total*100)+'%';
+}
+function _bkgAiSummary(results){
+  const META={ ok:{i:'✅',c:'#15803d',t:'ตรงครบ (บุคกิ้ง/เรือ/ตู้)'}, volmis:{i:'⚠️',c:'#b45309',t:'จำนวนตู้ไม่ตรง'},
+    vslmis:{i:'🔄',c:'#b45309',t:'เรือไม่ตรงแผน'}, notfound:{i:'❓',c:'#64748b',t:'ไม่เจอบุคกิ้งนี้ในแผน (บันทึกรูปแล้ว)'},
+    unreadable:{i:'🚫',c:'#dc2626',t:'อ่านไม่ออก / ไม่พบเลขบุคกิ้ง'}, error:{i:'❌',c:'#dc2626',t:'ผิดพลาด'} };
+  const cnt={}; results.forEach(r=>cnt[r.st]=(cnt[r.st]||0)+1);
+  const body=document.getElementById('bkgAiBody'); if(!body) return;
+  const summary=['ok','volmis','vslmis','notfound','unreadable','error'].filter(k=>cnt[k]).map(k=>`${META[k].i} ${META[k].t.split(' ')[0]} ${cnt[k]}`).join('　');
+  const rows=results.map(r=>{ const m=META[r.st]||META.error;
+    const read = r.st==='error' ? `<div style="font-size:11px;color:#dc2626;">${woH(r.err||'')}</div>`
+      : `<div style="font-size:11px;color:#475569;">ใบ: บุคกิ้ง <b>${woH(r.bkg||'-')}</b> · เรือ ${woH(r.vsl||'-')} · ${r.vol||0} ตู้</div>`;
+    const plan = r.plan ? `<div style="font-size:11px;color:${r.st==='ok'?'#15803d':'#b45309'};">แผน: เรือ ${woH(r.plan.vessel)} · ${r.plan.vol} ตู้ · ${woH(r.plan.label)}</div>` : '';
+    return `<div style="display:flex;gap:10px;padding:9px 2px;border-bottom:1px solid #f1f5f9;">
+      <div style="font-size:18px;line-height:1.2;">${m.i}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12.5px;font-weight:700;color:${m.c};">${m.t} <span style="font-weight:400;color:#94a3b8;">· ${woH(r.file||'')}</span></div>
+        ${read}${plan}
+      </div></div>`;
+  }).join('');
+  body.innerHTML=`<div style="font-size:13px;font-weight:800;color:#0f2a52;margin-bottom:4px;">อ่านทั้งหมด ${results.length} ใบ</div>
+    <div style="font-size:12px;color:#334155;margin-bottom:12px;">${summary}</div>
+    ${rows}
+    <button onclick="_bkgAiClose()" style="margin-top:14px;width:100%;padding:11px;border:none;border-radius:9px;background:#1a3a6b;color:#fff;font-weight:800;cursor:pointer;">เสร็จ</button>`;
+}
+function _bkgAiClose(){ const p=document.getElementById('bkgAiBg'); if(p)p.style.display='none'; }
 
 // ── แกลเลอรีดูรูป BKG ทั้งเรือ — เปิดแบบพลิกแฟ้ม + หัวกำกับ INV/ลอย + เรือ ──
 let _bkgGal={items:[],idx:0,vessel:''};
