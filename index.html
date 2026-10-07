@@ -3149,6 +3149,16 @@ async function loadBkgConf(){
     (data||[]).forEach(r=>{ BKG_CONF[String(r.bkg_no||'').trim()] = r; });
   }catch(e){ BKG_CONF={}; console.warn('bkg_confirmations ยังไม่มี (รัน SQL ก่อน):', e.message); }
 }
+/* ย้ายเรือ/ซอยบุคกิ้ง → ลบรูปยืนยันเดิมทิ้ง → บังคับอัปใหม่ทุกครั้ง (กลับเป็น ❗) */
+async function invalidateBkgConf(bkg){
+  const b=String(bkg||'').trim(); if(!b) return;
+  const conf=BKG_CONF[b];
+  delete BKG_CONF[b];   // เอาออกทันที → ไอคอนเป็น ❗ เดี๋ยวนั้น
+  try{
+    if(conf&&conf.image_path){ await sb.storage.from('bkg_confirmations').remove([conf.image_path]); }
+    await sb.from('bkg_confirmations').delete().eq('bkg_no', b);
+  }catch(e){ console.warn('invalidateBkgConf:', e.message); }
+}
 /* ไอคอนสถานะต่อบุคกิ้ง: ไม่มีรูป=❗ · ยืนยันตรงเรือนี้=✅ · เคยยืนยันเรืออื่น(ย้าย/split)=🔄 */
 function _bkgIcon(bkg){
   const b=String(bkg||'').trim(); if(!b) return '';
@@ -3568,6 +3578,7 @@ async function confirmRevise(){
   if(!placed) tgt.push(moved);
   saveLoyRows(j, tgt);
   _queueBookingEvent({ booking_no: moved.bkg, event_type:'move', from_vessel:(loadSlotConfigs()[idx]||{}).vessel||'', to_vessel: tc.vessel||'', vol });
+  invalidateBkgConf(moved.bkg);   // ย้ายเรือ → บังคับอัปรูป BKG ใหม่
   document.getElementById('reviseModal').style.display = 'none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));   // รีเฟรชลำนี้ → หายไป
   calcXlsTotals();
@@ -3636,6 +3647,7 @@ async function confirmReviseInv(){
   ['xi_inv_','xi_des_','xi_bkg_','xi_vol_'].forEach(p=>{ const el=document.getElementById(p+r); if(el) el.value=''; });
   saveInvDraft();
   _queueBookingEvent({ booking_no: bkg||inv, event_type:'move', from_vessel:(cfgs[idx]||{}).vessel||'', to_vessel: tc.vessel||'', vol, detail:'ย้ายอินวอยซ์ '+inv+(bkg?(' (BKG '+bkg+')'):'') });
+  if(bkg) invalidateBkgConf(bkg);   // ย้ายอินวอยซ์+BKG → บังคับอัปรูปใหม่
   document.getElementById('reviseModal').style.display = 'none';
   document.getElementById('xlsInvBody').innerHTML = buildInvTableHtml(cfgs[idx]||{}, []);
   calcXlsTotals();
@@ -3701,6 +3713,7 @@ function confirmSplit(){
   compact.splice(compactIdx, 1, ...newRows);
   saveLoyRows(idx, compact);
   _queueBookingEvent({ booking_no: src.bkg, event_type:'split', vol: src.vol, detail:'แยกเป็น '+newRows.map(x=>x.bkg+'('+x.vol+')').join(', ') });
+  invalidateBkgConf(src.bkg);   // ซอยบุคกิ้ง → รูปเดิมใช้ไม่ได้ บังคับอัปใหม่ต่อบุคกิ้งย่อย
   newRows.forEach(x=>{ if(x.bkg!==src.bkg) _queueBookingEvent({ booking_no:x.bkg, event_type:'split_from', vol:x.vol, detail:'แยกมาจาก '+src.bkg }); });
   document.getElementById('splitModal').style.display = 'none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));
