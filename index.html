@@ -3110,7 +3110,7 @@ function buildInvTableHtml(c, dbRows){
       <td class="xls-rn">${r+1}</td>
       <td style="position:relative;${_invBorder}"><input id="xi_inv_${r}" type="text" value="${h(d.invoice_no||'')}" readonly tabindex="-1" style="${_ro}${_invPadL}${_paidOCF?'padding-right:56px;':''}">${_stBadge}${_ocfBadge}</td>
       <td><input id="xi_des_${r}" type="text" value="${h(d.destination||'')}" readonly tabindex="-1" style="${_ro}color:#334155;"></td>
-      <td><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}"></td>
+      <td style="position:relative;"><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}padding-left:20px;">${d.booking_no?_bkgIcon(d.booking_no):''}</td>
       <td><input id="xi_vol_${r}" type="text" value="${d.container_count||''}" readonly tabindex="-1" style="${_ro}text-align:center;"></td>
       <td style="white-space:nowrap;">${(d.invoice_no||d.booking_no)?`<button type="button" onclick="reviseInv(${r})" title="ย้ายทั้งอินวอยซ์ (+BKG) ไปเรืออื่น" style="font-size:12px;padding:1px 5px;border:1px solid #93c5fd;background:#eff6ff;border-radius:6px;cursor:pointer;margin-right:3px;">↪</button><button class="xci-del" onclick="clearInvRow(${r})" title="เอาบุคกิ้งกลับเป็นลอย">✕</button>`:''}</td>
     </tr>`;
@@ -3124,7 +3124,7 @@ function buildLoyTableHtml(loyData){
     const ld = loyData[r] || {};
     lhtml += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-right:20px;">${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
+      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:20px;padding-right:20px;">${ld.bkg?_bkgIcon(ld.bkg):''}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
       <td><input id="xl_vol_${r}" type="text" value="${ld.vol||''}" readonly tabindex="-1" style="${_lro}text-align:center;"></td>
       <td><input id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" readonly tabindex="-1" style="${_lro}"></td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่อินวอยซ์" style="font-size:13px;padding:1px 5px;border:1px solid #86efac;background:#f0fdf4;border-radius:6px;cursor:pointer;">🔗</button>`:''}</td>
@@ -3135,6 +3135,82 @@ function buildLoyTableHtml(loyData){
     </tr>`;
   }
   return lhtml;
+}
+
+// ═══ BKG Confirmation (รูปยืนยันบุคกิ้งจากสายเรือ + สถานะ ❗/✅/🔄) ═══
+let BKG_CONF = {};   /* bkg_no(trim) → {vessel_name, sail_date, image_path, status} */
+async function loadBkgConf(){
+  try{
+    const { data, error } = await sb.from('bkg_confirmations')
+      .select('bkg_no,vessel_name,sail_date,image_path,status');
+    if(error) throw error;
+    BKG_CONF = {};
+    (data||[]).forEach(r=>{ BKG_CONF[String(r.bkg_no||'').trim()] = r; });
+  }catch(e){ BKG_CONF={}; console.warn('bkg_confirmations ยังไม่มี (รัน SQL ก่อน):', e.message); }
+}
+/* ไอคอนสถานะต่อบุคกิ้ง: ไม่มีรูป=❗ · ยืนยันตรงเรือนี้=✅ · เคยยืนยันเรืออื่น(ย้าย/split)=🔄 */
+function _bkgIcon(bkg){
+  const b=String(bkg||'').trim(); if(!b) return '';
+  const cur=loadSlotConfigs()[currentVslIdx]||{};
+  const conf=BKG_CONF[b];
+  let ico;
+  if(!conf) ico='❗';
+  else if((conf.vessel_name||'')===(cur.vessel||'') && String(conf.sail_date||'').substring(0,10)===String(cur.sailDate||'').substring(0,10)) ico='✅';
+  else ico='🔄';
+  return `<span onclick="bkgConfClick('${b.replace(/['"\\]/g,'')}')" title="รูป BKG confirmation" style="position:absolute;left:3px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:11px;line-height:1;z-index:2;">${ico}</span>`;
+}
+function _bkgPopupClose(){ const p=document.getElementById('bkgConfPop'); if(p)p.style.display='none'; }
+function bkgConfClick(bkg){
+  const b=String(bkg).trim(); const conf=BKG_CONF[b];
+  const cur=loadSlotConfigs()[currentVslIdx]||{};
+  const stale=conf&&((conf.vessel_name||'')!==(cur.vessel||'')||String(conf.sail_date||'').substring(0,10)!==String(cur.sailDate||'').substring(0,10));
+  let bg=document.getElementById('bkgConfPop');
+  if(!bg){ bg=document.createElement('div'); bg.id='bkgConfPop'; bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:99999;'; bg.onclick=e=>{if(e.target===bg)_bkgPopupClose();}; document.body.appendChild(bg); }
+  const info = !conf ? '<span style="color:#dc2626;font-weight:700;">❗ ยังไม่มีรูป BKG confirm</span>'
+    : stale ? `<span style="color:#d97706;font-weight:700;">🔄 รูปเดิมยืนยันกับเรือ "${h(conf.vessel_name||'-')}" — เรือนี้เปลี่ยนแล้ว ต้องอัปใหม่</span>`
+    : `<span style="color:#15803d;font-weight:700;">✅ ยืนยันแล้ว (เรือ ${h(conf.vessel_name||'-')})</span>`;
+  bg.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:14px;padding:18px 20px;width:min(380px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.35);">
+    <div style="font-size:14px;font-weight:800;color:#0f2a52;margin-bottom:6px;">📎 รูป BKG Confirmation</div>
+    <div style="font-size:12px;color:#475569;margin-bottom:4px;">บุคกิ้ง <b>${h(b)}</b></div>
+    <div style="font-size:12px;margin-bottom:14px;line-height:1.5;">${info}</div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="_doBkgUpload('${b.replace(/['"\\]/g,'')}')" style="flex:1;padding:9px;border:none;border-radius:9px;background:#1a3a6b;color:#fff;font-weight:700;cursor:pointer;">📤 ${conf?'อัปรูปใหม่':'อัปรูป'}</button>
+      ${conf&&conf.image_path?`<button onclick="_doBkgView('${b.replace(/['"\\]/g,'')}')" style="flex:1;padding:9px;border:1px solid #cbd5e1;border-radius:9px;background:#f8fafc;color:#334155;font-weight:700;cursor:pointer;">👁 ดูรูป</button>`:''}
+      <button onclick="_bkgPopupClose()" style="padding:9px 14px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#64748b;font-weight:700;cursor:pointer;">ปิด</button>
+    </div>
+  </div>`;
+  bg.style.display='flex';
+}
+function _refreshPlannerTables(){
+  const c=loadSlotConfigs()[currentVslIdx]||{};
+  const ib=document.getElementById('xlsInvBody'); if(ib) ib.innerHTML=buildInvTableHtml(c,[]);
+  const lb=document.getElementById('xlsLoyBody'); if(lb) lb.innerHTML=buildLoyTableHtml(loadLoyRows(currentVslIdx));
+}
+function _doBkgUpload(bkg){
+  const cur=loadSlotConfigs()[currentVslIdx]||{};
+  if(!cur.vessel){ alert('เลือกเรือก่อน'); return; }
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0]; if(!f)return;
+    try{
+      const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
+      const safe=String(bkg).trim().replace(/[^0-9A-Za-z_-]/g,'_');
+      const path=`${safe}/${Date.now()}.${ext}`;
+      const up=await sb.storage.from('bkg_confirmations').upload(path,f,{upsert:true,contentType:f.type||undefined});
+      if(up.error) throw up.error;
+      const row={ bkg_no:String(bkg).trim(), vessel_name:cur.vessel, sail_date:String(cur.sailDate||'').substring(0,10)||null, image_path:path, status:'uploaded', updated_at:new Date().toISOString() };
+      const ins=await sb.from('bkg_confirmations').upsert(row,{onConflict:'bkg_no'});
+      if(ins.error) throw ins.error;
+      await loadBkgConf(); _refreshPlannerTables(); _bkgPopupClose();
+      showMsg('xlsMsg','✅ อัปรูป BKG confirm แล้ว — บุคกิ้ง '+String(bkg).trim(),'success');
+    }catch(e){ alert('อัปรูปไม่สำเร็จ: '+(e.message||e)); }
+  };
+  inp.click();
+}
+async function _doBkgView(bkg){
+  const conf=BKG_CONF[String(bkg).trim()]; if(!conf||!conf.image_path){ alert('ยังไม่มีรูป'); return; }
+  try{ const s=await sb.storage.from('bkg_confirmations').createSignedUrl(conf.image_path,600); if(s.error)throw s.error; window.open(s.data.signedUrl,'_blank'); }
+  catch(e){ alert('เปิดรูปไม่ได้: '+(e.message||e)); }
 }
 
 // ── Render Excel Sheet (async — โหลดจาก vessel_plan ถ้าไม่มี draft) ──
@@ -4225,6 +4301,7 @@ async function loadVessels(){
 async function reloadVesselFresh(){
   for(let i=0;i<SLOT_COUNT;i++){ localStorage.removeItem(getInvKey(i)); localStorage.removeItem(getLoyKey(i)); localStorage.removeItem(getDbSetKey(i)); }
   clearBaseline();   // ล้าง baseline เก่าด้วย → เปิดเรือรอบนี้จะ snapshot ใหม่
+  loadBkgConf();     // โหลดสถานะรูป BKG confirmation (❗/✅/🔄)
   try{ await loadVessels(); }catch(e){ console.warn('reloadVesselFresh:', e); }
 }
 
