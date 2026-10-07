@@ -3403,8 +3403,8 @@ async function _bkgAiProcess(files){
       const { data, error } = await sb.functions.invoke('bkg-ai', { body:{ image_b64:b64, ext } });
       if(error) throw new Error(error.message||String(error));
       if(data && data.error) throw new Error(data.error);
-      const bkg=String((data&&data.booking)||'').trim(), aiVsl=String((data&&data.vessel)||'').trim(), aiVol=Number((data&&data.vol)||0);
-      if(!data || !data.readable || !bkg){ results.push({file:fname,thumb,st:'unreadable',bkg,vsl:aiVsl,vol:aiVol}); continue; }
+      const bkg=String((data&&data.booking)||'').trim(), aiVsl=String((data&&data.vessel)||'').trim(), aiVol=Number((data&&data.vol)||0), aiVer=String((data&&data.version)||'').trim();
+      if(!data || !data.readable || !bkg){ results.push({file:fname,thumb,st:'unreadable',bkg,vsl:aiVsl,vol:aiVol,ver:aiVer}); continue; }
       const plan=planMap[bkg];
       // อัปรูป + upsert conf (เก็บทุกหน้าที่อ่านออก แม้ยังไม่เจอในแผน)
       const safe=bkg.replace(/[^0-9A-Za-z_-]/g,'_'); const path=`${safe}/${Date.now()}_${i}.${ext}`;
@@ -3414,13 +3414,16 @@ async function _bkgAiProcess(files){
                   status:'ai', ai_vessel:aiVsl, ai_bkg:bkg, ai_vol:aiVol, updated_at:new Date().toISOString() };
       const ins=await sb.from('bkg_confirmations').upsert(row,{onConflict:'bkg_no'});
       if(ins.error) throw ins.error;
+      // บันทึกประวัติบุคกิ้ง: ยืนยัน BKG + VERSION NUMBER
+      _queueBookingEvent({ booking_no:bkg, event_type:'bkg_confirm', to_vessel:aiVsl, vol:aiVol, detail:`ยืนยัน BKG${aiVer?(' v'+aiVer):''} · เรือ ${aiVsl||'-'} · ${aiVol} ตู้` });
       let st;
       if(!plan) st='notfound';
       else { const vOk=_normVsl(aiVsl)===_normVsl(plan.vessel); const volOk=aiVol===Number(plan.vol||0); st = vOk ? (volOk?'ok':'volmis') : 'vslmis'; }
-      results.push({file:fname,thumb,st,bkg,vsl:aiVsl,vol:aiVol,plan});
+      results.push({file:fname,thumb,st,bkg,vsl:aiVsl,vol:aiVol,ver:aiVer,plan});
     }catch(e){ results.push({file:fname,thumb,st:'error',err:String((e&&e.message)||e)}); }
   }
   await loadBkgConf(); _refreshPlannerTables();
+  await _flushBookingEvents();
   _bkgAiSummary(results);
 }
 function _bkgAiShow(total){
@@ -3453,7 +3456,7 @@ function _bkgAiSummary(results){
     const matched = r.plan ? (r.plan.inv?('INV '+r.plan.inv):'ลอย') : '—';
     const matchColor = r.plan ? (r.st==='ok'?'#15803d':'#b45309') : '#94a3b8';
     const read = r.st==='error' ? `<div style="font-size:11px;color:#dc2626;">${woH(r.err||'')}</div>`
-      : `<div style="font-size:11px;color:#475569;">ใบ: บุคกิ้ง <b>${woH(r.bkg||'-')}</b> · เรือ ${woH(r.vsl||'-')} · ${r.vol||0} ตู้</div>`;
+      : `<div style="font-size:11px;color:#475569;">ใบ: บุคกิ้ง <b>${woH(r.bkg||'-')}</b> · เรือ ${woH(r.vsl||'-')} · ${r.vol||0} ตู้${r.ver?` · <b>v${woH(r.ver)}</b>`:''}</div>`;
     const matchLine = (r.st==='error') ? '' :
       `<div style="font-size:12px;font-weight:800;color:${matchColor};">↳ จับคู่ในระบบ: ${woH(matched)}${r.plan?` · เรือ ${woH(r.plan.vessel)} · ${r.plan.vol} ตู้`:''}</div>`;
     return `<div style="display:flex;gap:10px;padding:9px 2px;border-bottom:1px solid #f1f5f9;align-items:flex-start;">
@@ -4180,6 +4183,7 @@ async function searchBkgHistory(){
       else if(ev.event_type==='remove'){ icon='🗑'; label=ev.detail||'ลบบุคกิ้ง'; }
       else if(ev.event_type==='edit'){ icon='✏️'; label=ev.detail||'แก้ไข'; }
       else if(ev.event_type==='rename'){ icon='🔤'; label=ev.detail||'เปลี่ยนเลขบุคกิ้ง'; }
+      else if(ev.event_type==='bkg_confirm'){ icon='📎'; label=ev.detail||'ยืนยัน BKG'; }
       return `<div style="display:flex;gap:9px;padding:9px 4px;border-bottom:1px solid #f1f5f9;align-items:flex-start;">
         <span style="font-size:15px;line-height:1.2;">${icon}</span>
         <div style="flex:1;"><div style="font-size:12.5px;color:#0f2a52;font-weight:600;line-height:1.4;">${h(label)}</div>
