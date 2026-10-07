@@ -3197,26 +3197,54 @@ function _refreshPlannerTables(){
   const ib=document.getElementById('xlsInvBody'); if(ib) ib.innerHTML=buildInvTableHtml(c,[]);
   const lb=document.getElementById('xlsLoyBody'); if(lb) lb.innerHTML=buildLoyTableHtml(loadLoyRows(currentVslIdx));
 }
+let _bkgPending=null;
 function _doBkgUpload(bkg){
   const cur=loadSlotConfigs()[currentVslIdx]||{};
   if(!cur.vessel){ alert('เลือกเรือก่อน'); return; }
   const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf';
-  inp.onchange=async()=>{
-    const f=inp.files&&inp.files[0]; if(!f)return;
-    try{
-      const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
-      const safe=String(bkg).trim().replace(/[^0-9A-Za-z_-]/g,'_');
-      const path=`${safe}/${Date.now()}.${ext}`;
-      const up=await sb.storage.from('bkg_confirmations').upload(path,f,{upsert:true,contentType:f.type||undefined});
-      if(up.error) throw up.error;
-      const row={ bkg_no:String(bkg).trim(), vessel_name:cur.vessel, sail_date:String(cur.sailDate||'').substring(0,10)||null, image_path:path, status:'uploaded', updated_at:new Date().toISOString() };
-      const ins=await sb.from('bkg_confirmations').upsert(row,{onConflict:'bkg_no'});
-      if(ins.error) throw ins.error;
-      await loadBkgConf(); _refreshPlannerTables(); _bkgPopupClose();
-      showMsg('xlsMsg','✅ อัปรูป BKG confirm แล้ว — บุคกิ้ง '+String(bkg).trim(),'success');
-    }catch(e){ alert('อัปรูปไม่สำเร็จ: '+(e.message||e)); }
-  };
+  inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(f) _bkgPreviewUpload(bkg,f); };
   inp.click();
+}
+/* หน้าพรีวิวก่อนอัป — เช็คว่าใช่รูปที่ถูกต้องไหม ก่อนกดอัปจริง */
+function _bkgPreviewUpload(bkg, file){
+  const cur=loadSlotConfigs()[currentVslIdx]||{};
+  if(_bkgPending&&_bkgPending.url){ try{URL.revokeObjectURL(_bkgPending.url);}catch(e){} }
+  const url=URL.createObjectURL(file);
+  _bkgPending={ bkg:String(bkg).trim(), file, url, vessel:cur.vessel, sailDate:String(cur.sailDate||'').substring(0,10) };
+  let bg=document.getElementById('bkgPrevBg');
+  if(!bg){ bg=document.createElement('div'); bg.id='bkgPrevBg'; bg.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.84);display:flex;align-items:center;justify-content:center;z-index:100001;'; bg.onclick=e=>{if(e.target===bg)_bkgPrevClose();}; document.body.appendChild(bg); }
+  const isImg=/^image\//.test(file.type);
+  const preview = isImg
+    ? `<img src="${url}" style="max-width:100%;max-height:62vh;display:block;margin:auto;" alt="preview">`
+    : `<iframe src="${url}" style="width:100%;height:62vh;border:none;background:#fff;"></iframe>`;
+  bg.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:14px;width:min(760px,94vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(0,0,0,.55);">
+    <div style="padding:12px 16px;background:#1a3a6b;color:#fff;font-weight:800;font-size:14px;line-height:1.3;">👁 ตรวจรูปก่อนอัป — บุคกิ้ง ${woH(_bkgPending.bkg)} · เรือ ${woH(cur.vessel||'-')}</div>
+    <div style="flex:1;min-height:0;background:#0f172a;overflow:auto;padding:8px;">${preview}</div>
+    <div style="padding:11px 14px;display:flex;gap:10px;background:#f1f5f9;">
+      <button onclick="_bkgDoUploadConfirmed()" style="flex:1;padding:10px;border:none;border-radius:9px;background:#16a34a;color:#fff;font-weight:800;cursor:pointer;">✅ ถูกต้อง — อัปเลย</button>
+      <button onclick="_bkgPrevRepick()" style="padding:10px 14px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#334155;font-weight:700;cursor:pointer;">🔁 เลือกใหม่</button>
+      <button onclick="_bkgPrevClose()" style="padding:10px 14px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#64748b;font-weight:700;cursor:pointer;">ยกเลิก</button>
+    </div>
+  </div>`;
+  bg.style.display='flex';
+}
+function _bkgPrevClose(){ const p=document.getElementById('bkgPrevBg'); if(p)p.style.display='none'; if(_bkgPending&&_bkgPending.url){try{URL.revokeObjectURL(_bkgPending.url);}catch(e){}} _bkgPending=null; }
+function _bkgPrevRepick(){ const b=_bkgPending?_bkgPending.bkg:''; _bkgPrevClose(); if(b) _doBkgUpload(b); }
+async function _bkgDoUploadConfirmed(){
+  const p=_bkgPending; if(!p)return;
+  const okBtn=document.querySelector('#bkgPrevBg button'); if(okBtn){okBtn.disabled=true;okBtn.textContent='⏳ กำลังอัป...';}
+  try{
+    const ext=(p.file.name.split('.').pop()||'jpg').toLowerCase();
+    const safe=p.bkg.replace(/[^0-9A-Za-z_-]/g,'_');
+    const path=`${safe}/${Date.now()}.${ext}`;
+    const up=await sb.storage.from('bkg_confirmations').upload(path,p.file,{upsert:true,contentType:p.file.type||undefined});
+    if(up.error) throw up.error;
+    const row={ bkg_no:p.bkg, vessel_name:p.vessel, sail_date:p.sailDate||null, image_path:path, status:'uploaded', updated_at:new Date().toISOString() };
+    const ins=await sb.from('bkg_confirmations').upsert(row,{onConflict:'bkg_no'});
+    if(ins.error) throw ins.error;
+    await loadBkgConf(); _refreshPlannerTables(); _bkgPrevClose(); _bkgPopupClose();
+    showMsg('xlsMsg','✅ อัปรูป BKG confirm แล้ว — บุคกิ้ง '+p.bkg,'success');
+  }catch(e){ alert('อัปรูปไม่สำเร็จ: '+(e.message||e)); const b=document.querySelector('#bkgPrevBg button'); if(b){b.disabled=false;b.textContent='✅ ถูกต้อง — อัปเลย';} }
 }
 async function _doBkgView(bkg){
   const conf=BKG_CONF[String(bkg).trim()]; if(!conf||!conf.image_path){ alert('ยังไม่มีรูป'); return; }
@@ -3244,7 +3272,7 @@ function _bkgGalShow(){
   let bg=document.getElementById('bkgGalBg');
   if(!bg){ bg=document.createElement('div'); bg.id='bkgGalBg'; bg.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.82);display:flex;align-items:center;justify-content:center;z-index:100000;'; bg.onclick=e=>{if(e.target===bg)_bkgGalClose();}; document.body.appendChild(bg); }
   bg.innerHTML=`<div style="perspective:1800px;width:min(820px,94vw);">
-    <div id="bkgGalCover" style="transform-origin:left center;transition:transform .55s cubic-bezier(.3,.7,.4,1);transform:rotateY(-108deg);background:#fff;border-radius:12px;box-shadow:0 30px 90px rgba(0,0,0,.55);overflow:hidden;display:flex;flex-direction:column;">
+    <div id="bkgGalCover" style="transform-origin:left center;transition:transform .62s cubic-bezier(.34,1.32,.5,1),box-shadow .5s ease;transform:rotateY(-120deg) scale(.8);background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;">
       <div id="bkgGalCap" style="padding:12px 16px;background:#1a3a6b;color:#fff;font-weight:800;font-size:15px;line-height:1.3;"></div>
       <div style="background:#0f172a;display:flex;align-items:center;justify-content:center;overflow:auto;min-height:260px;max-height:72vh;">
         <img id="bkgGalImg" style="max-width:100%;max-height:72vh;display:block;transition:transform .35s ease,opacity .3s ease;" alt="BKG">
@@ -3257,9 +3285,9 @@ function _bkgGalShow(){
       </div>
     </div>
   </div>`;
-  bg.style.display='flex';
+  bg.style.transition='opacity .4s ease'; bg.style.opacity='0'; bg.style.display='flex';
   _bkgGalRender(0);
-  requestAnimationFrame(()=>{ setTimeout(()=>{ const cv=document.getElementById('bkgGalCover'); if(cv) cv.style.transform='rotateY(0deg)'; },40); });
+  requestAnimationFrame(()=>{ bg.style.opacity='1'; setTimeout(()=>{ const cv=document.getElementById('bkgGalCover'); if(cv){ cv.style.transform='rotateY(0deg) scale(1)'; cv.style.boxShadow='0 30px 90px rgba(0,0,0,.55)'; } },50); });
 }
 function _bkgGalRender(dir){
   const g=_bkgGal, it=g.items[g.idx]; if(!it)return;
