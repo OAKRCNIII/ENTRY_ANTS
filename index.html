@@ -3108,11 +3108,12 @@ function buildInvTableHtml(c, dbRows){
       : '';
     const _invBorder = _inDb ? 'border-left:3px solid #16a34a;' : _isNew ? 'border-left:3px solid #f97316;' : '';
     const _invPadL = (_inDb||_isNew) ? 'padding-left:34px;' : '';
+    const _bv = d.booking_no?_bkgVerBadge(d.booking_no,6):'';
     html += `<tr>
       <td class="xls-rn">${r+1}</td>
       <td style="position:relative;${_invBorder}"><input id="xi_inv_${r}" type="text" value="${h(d.invoice_no||'')}" readonly tabindex="-1" style="${_ro}${_invPadL}${_paidOCF?'padding-right:56px;':''}">${_stBadge}${_ocfBadge}</td>
       <td><input id="xi_des_${r}" type="text" value="${h(d.destination||'')}" readonly tabindex="-1" style="${_ro}color:#334155;"></td>
-      <td style="position:relative;"><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}padding-left:20px;">${d.booking_no?_bkgIcon(d.booking_no,d.container_count):''}</td>
+      <td style="position:relative;"><input id="xi_bkg_${r}" type="text" value="${h(d.booking_no||'')}" readonly tabindex="-1" style="${_ro}padding-left:20px;${_bv?'padding-right:46px;':''}">${d.booking_no?_bkgIcon(d.booking_no,d.container_count):''}${_bv}</td>
       <td><input id="xi_vol_${r}" type="text" value="${d.container_count||''}" readonly tabindex="-1" style="${_ro}text-align:center;"></td>
       <td style="white-space:nowrap;">${(d.invoice_no||d.booking_no)?`<button type="button" onclick="reviseInv(${r})" title="ย้ายทั้งอินวอยซ์ (+BKG) ไปเรืออื่น" style="font-size:12px;padding:1px 5px;border:1px solid #93c5fd;background:#eff6ff;border-radius:6px;cursor:pointer;margin-right:3px;">↪</button><button class="xci-del" onclick="clearInvRow(${r})" title="เอาบุคกิ้งกลับเป็นลอย">✕</button>`:''}</td>
     </tr>`;
@@ -3124,9 +3125,10 @@ function buildLoyTableHtml(loyData){
   const _lro = 'width:100%;box-sizing:border-box;border:none;background:transparent;cursor:default;padding:6px 5px;font-size:12.5px;color:#0f2a52;outline:none;';   /* ลอย = โชว์อย่างเดียว */
   for(let r=0;r<LOY_ROWS;r++){
     const ld = loyData[r] || {};
+    const _lv = ld.bkg?_bkgVerBadge(ld.bkg,26):'';
     lhtml += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:20px;padding-right:20px;">${ld.bkg?_bkgIcon(ld.bkg,ld.vol):''}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
+      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:20px;padding-right:${_lv?'48px':'20px'};">${ld.bkg?_bkgIcon(ld.bkg,ld.vol):''}${_lv}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
       <td><input id="xl_vol_${r}" type="text" value="${ld.vol||''}" readonly tabindex="-1" style="${_lro}text-align:center;"></td>
       <td><input id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" readonly tabindex="-1" style="${_lro}"></td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่อินวอยซ์" style="font-size:13px;padding:1px 5px;border:1px solid #86efac;background:#f0fdf4;border-radius:6px;cursor:pointer;">🔗</button>`:''}</td>
@@ -3144,7 +3146,7 @@ let BKG_CONF = {};   /* bkg_no(trim) → {vessel_name, sail_date, image_path, st
 async function loadBkgConf(){
   try{
     const { data, error } = await sb.from('bkg_confirmations')
-      .select('bkg_no,vessel_name,sail_date,image_path,status,ai_vessel,ai_bkg,ai_vol');
+      .select('bkg_no,vessel_name,sail_date,image_path,status,ai_vessel,ai_bkg,ai_vol,ai_note');
     if(error) throw error;
     BKG_CONF = {};
     (data||[]).forEach(r=>{ BKG_CONF[String(r.bkg_no||'').trim()] = r; });
@@ -3422,8 +3424,9 @@ async function _bkgAiProcess(files){
       const safe=bkg.replace(/[^0-9A-Za-z_-]/g,'_'); const path=`${safe}/${Date.now()}_${i}.${ext}`;
       const up=await sb.storage.from('bkg_confirmations').upload(path,f,{upsert:true,contentType:(f&&f.type)||undefined});
       if(up.error) throw up.error;
+      const _pn=_bkgNote(bkg)||{}; const _note=JSON.stringify({..._pn, ...(aiVer?{v:aiVer}:{})});
       const row={ bkg_no:bkg, vessel_name:aiVsl, sail_date:(plan?plan.sailDate:null)||null, image_path:path,
-                  status:'ai', ai_vessel:aiVsl, ai_bkg:bkg, ai_vol:aiVol, updated_at:new Date().toISOString() };
+                  status:'ai', ai_vessel:aiVsl, ai_bkg:bkg, ai_vol:aiVol, ai_note:_note, updated_at:new Date().toISOString() };
       const ins=await sb.from('bkg_confirmations').upsert(row,{onConflict:'bkg_no'});
       if(ins.error) throw ins.error;
       // บันทึกประวัติบุคกิ้ง: ยืนยัน BKG + VERSION NUMBER
@@ -3549,10 +3552,18 @@ function _bkgGalGo(d){ const g=_bkgGal, n=g.items.length; if(n<2){return;} g.idx
 function _bkgGalClose(){ const p=document.getElementById('bkgGalBg'); if(p) p.style.display='none'; }
 
 // ── กล่องปั๊มเลขอินวอยซ์ทับรูป (แทนลายมือ) — ลากย้ายได้ จำตำแหน่งต่อบุคกิ้งใน ai_note ──
+/* ai_note = JSON รวม {sx,sy} (ตำแหน่งกล่องปั๊ม) + v (BKG version จากใบที่อัปล่าสุด) */
+function _bkgNote(bkg){ const c=BKG_CONF[String(bkg||'').trim()]; if(!c||!c.ai_note) return null;
+  try{ return typeof c.ai_note==='string'?JSON.parse(c.ai_note):c.ai_note; }catch(e){ return null; } }
 function _bkgStampPos(bkg){
-  const c=BKG_CONF[String(bkg||'').trim()];
-  try{ if(c&&c.ai_note){ const o=typeof c.ai_note==='string'?JSON.parse(c.ai_note):c.ai_note; if(o&&typeof o.sx==='number'&&typeof o.sy==='number') return {sx:o.sx,sy:o.sy}; } }catch(e){}
+  const o=_bkgNote(bkg);
+  if(o&&typeof o.sx==='number'&&typeof o.sy==='number') return {sx:o.sx,sy:o.sy};
   return {sx:.47, sy:.26};   // ค่าเริ่มต้น ~ ช่อง REMARK ของ OOCL
+}
+/* badge V.N ต่อท้ายเลขบุคกิ้งในช่อง BKG — version จากใบที่อัปล่าสุด */
+function _bkgVerBadge(bkg, right){
+  const o=_bkgNote(bkg); const v=o&&o.v; if(!v) return '';
+  return `<span title="BKG version จากใบที่อัปล่าสุด" style="position:absolute;right:${right}px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:800;color:#3730a3;background:#e0e7ff;border:1px solid #c7d2fe;border-radius:5px;padding:0 4px;pointer-events:none;line-height:1.5;white-space:nowrap;">V.${woH(String(v))}</span>`;
 }
 function _bkgStampApply(it){
   const stamp=document.getElementById('bkgGalStamp'); if(!stamp) return;
@@ -3574,7 +3585,7 @@ function _bkgStampDragInit(){
 }
 async function _bkgStampSave(bkg,sx,sy){
   const b=String(bkg||'').trim(); if(!b)return;
-  const note=JSON.stringify({sx:+(+sx).toFixed(4), sy:+(+sy).toFixed(4)});
+  const note=JSON.stringify({...(_bkgNote(b)||{}), sx:+(+sx).toFixed(4), sy:+(+sy).toFixed(4)});
   if(BKG_CONF[b]) BKG_CONF[b].ai_note=note;
   try{ await sb.from('bkg_confirmations').update({ai_note:note}).eq('bkg_no',b); }catch(e){ console.warn('stamp save:',e.message); }
 }
