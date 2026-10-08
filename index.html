@@ -3635,6 +3635,30 @@ function _bkgViewOne(idx){
   requestAnimationFrame(()=>{ const cv=document.getElementById('bkgGalCover'); if(cv){ cv.style.opacity='1'; cv.style.boxShadow='0 30px 90px rgba(0,0,0,.55)'; } });
 }
 function _bkgViewClose(){ const p=document.getElementById('bkgViewBg'); if(p) p.style.display='none'; }
+/* viewer เวอร์ชันรูป — เลื่อน ←/→ ข้ามเวอร์ชันได้ */
+let _bkgVer={items:[],idx:0,bkg:''};
+function _bkgVerView(idx){
+  const g=_bkgVer; if(!g.items.length) return;
+  g.idx=((idx%g.items.length)+g.items.length)%g.items.length;
+  let bg=document.getElementById('bkgVerViewBg');
+  if(!bg){ bg=document.createElement('div'); bg.id='bkgVerViewBg'; bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.93);display:flex;align-items:center;justify-content:center;z-index:100012;'; bg.onclick=e=>{if(e.target===bg)bg.style.display='none';}; document.body.appendChild(bg); }
+  const it=g.items[g.idx];
+  const isPdf=/\.pdf$/i.test(it.name||'');
+  const media = !it.url ? `<div style="color:#f87171;padding:40px;">เปิดรูปไม่ได้</div>`
+    : (isPdf ? `<iframe src="${it.url}" style="width:min(900px,94vw);height:80vh;border:none;background:#fff;border-radius:8px;"></iframe>`
+             : `<img src="${it.url}" style="max-width:94vw;max-height:80vh;display:block;border-radius:8px;box-shadow:0 12px 50px rgba(0,0,0,.6);">`);
+  const multi=g.items.length>1;
+  bg.innerHTML=`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:center;gap:12px;max-height:96vh;">
+    <div style="color:#fff;font-size:14px;font-weight:700;text-align:center;">เวอร์ชัน #${g.items.length-g.idx} · ${woH(it.date)}${it.isCur?' · <span style="color:#4ade80;">ล่าสุด</span>':''} <span style="opacity:.65;font-weight:400;">(${g.idx+1}/${g.items.length})</span></div>
+    ${media}
+    <div style="display:flex;gap:12px;align-items:center;">
+      ${multi?`<button onclick="_bkgVerView(${g.idx-1})" title="เวอร์ชันถัดไป (ใหม่กว่า)" style="padding:10px 24px;border:none;border-radius:10px;background:rgba(255,255,255,.15);color:#fff;font-weight:800;font-size:17px;cursor:pointer;">←</button>`:''}
+      <button onclick="document.getElementById('bkgVerViewBg').style.display='none'" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(255,255,255,.1);color:#cbd5e1;font-weight:700;cursor:pointer;">ปิด</button>
+      ${multi?`<button onclick="_bkgVerView(${g.idx+1})" title="เวอร์ชันก่อนหน้า (เก่ากว่า)" style="padding:10px 24px;border:none;border-radius:10px;background:rgba(255,255,255,.15);color:#fff;font-weight:800;font-size:17px;cursor:pointer;">→</button>`:''}
+    </div>
+  </div>`;
+  bg.style.display='flex';
+}
 /* ประวัติเวอร์ชันรูป — list ไฟล์ทั้งหมดใน storage โฟลเดอร์ของบุคกิ้ง (รูปเก่าไม่ถูกลบตอนอัปใหม่) */
 async function _bkgVerHistory(){
   const g=_bkgGal, it=g.items[g.idx]; if(!it){ return; }
@@ -3650,16 +3674,18 @@ async function _bkgVerHistory(){
   let urls=[];
   try{ const s=await sb.storage.from('bkg_confirmations').createSignedUrls(paths,600); if(!s.error) urls=(s.data||[]).map(d=>d&&d.signedUrl||''); }catch(e){}
   const curPath=(BKG_CONF[String(it.bkg).trim()]||{}).image_path||'';
-  const cards=files.map((f,i)=>{
-    const dt=(()=>{ try{ const t=f.created_at?new Date(f.created_at):new Date(parseInt(f.name)); return t.toLocaleString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return f.name; } })();
-    const isCur=(safe+'/'+f.name)===curPath;
-    const u=urls[i]||'';
-    const isPdf=/\.pdf$/i.test(f.name);
-    const thumb=u? (isPdf?`<div style="height:150px;display:flex;align-items:center;justify-content:center;font-size:34px;background:#f1f5f9;">📄</div>`:`<img src="${u}" style="width:100%;height:150px;object-fit:cover;display:block;background:#0f172a;">`) : `<div style="height:150px;background:#f1f5f9;"></div>`;
-    return `<div onclick="${u?`_bkgZoom('${u}')`:''}" style="border:2px solid ${isCur?'#16a34a':'#e2e8f0'};border-radius:10px;overflow:hidden;cursor:${u?'zoom-in':'default'};position:relative;">
-      ${isCur?`<div style="position:absolute;top:5px;left:5px;z-index:2;font-size:10px;font-weight:800;color:#fff;background:#16a34a;border-radius:5px;padding:1px 6px;">ล่าสุด</div>`:''}
+  const vers=files.map((f,i)=>{
+    let dt; try{ const t=f.created_at?new Date(f.created_at):new Date(parseInt(f.name)); dt=t.toLocaleString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ dt=f.name; }
+    return { url:urls[i]||'', date:dt, isCur:(safe+'/'+f.name)===curPath, name:f.name };
+  });
+  _bkgVer={ items:vers, idx:0, bkg:it.bkg };
+  const cards=vers.map((v,i)=>{
+    const isPdf=/\.pdf$/i.test(v.name);
+    const thumb=v.url? (isPdf?`<div style="height:150px;display:flex;align-items:center;justify-content:center;font-size:34px;background:#f1f5f9;">📄</div>`:`<img src="${v.url}" style="width:100%;height:150px;object-fit:cover;display:block;background:#0f172a;">`) : `<div style="height:150px;background:#f1f5f9;"></div>`;
+    return `<div onclick="${v.url?`_bkgVerView(${i})`:''}" style="border:2px solid ${v.isCur?'#16a34a':'#e2e8f0'};border-radius:10px;overflow:hidden;cursor:${v.url?'pointer':'default'};position:relative;">
+      ${v.isCur?`<div style="position:absolute;top:5px;left:5px;z-index:2;font-size:10px;font-weight:800;color:#fff;background:#16a34a;border-radius:5px;padding:1px 6px;">ล่าสุด</div>`:''}
       ${thumb}
-      <div style="padding:6px 9px;font-size:11px;color:#475569;font-weight:700;">#${files.length-i} · ${woH(dt)}</div>
+      <div style="padding:6px 9px;font-size:11px;color:#475569;font-weight:700;">#${vers.length-i} · ${woH(v.date)}</div>
     </div>`;
   }).join('');
   let bg=document.getElementById('bkgVerBg');
@@ -3681,15 +3707,13 @@ function _bkgViewPrint(){
   if(!w){ alert('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — อนุญาต popup ก่อน'); return; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
     <style>
-      @page{margin:8mm;}
+      @page{margin:6mm;}
       *{box-sizing:border-box;}
-      body{margin:0;font-family:'Sarabun','Segoe UI',sans-serif;}
-      .hd{font-size:13px;font-weight:700;color:#0f2a52;margin:0 0 6px;}
-      .wrap{position:relative;display:inline-block;width:100%;line-height:0;}
-      .wrap img{width:100%;display:block;}
-      .st{position:absolute;transform:translate(0,0) rotate(-5deg);background:rgba(255,255,255,.82);border:2.5px solid #dc2626;color:#b91c1c;font-weight:900;font-size:20px;line-height:1.1;padding:3px 12px;border-radius:7px;white-space:nowrap;font-family:'Sarabun',sans-serif;letter-spacing:.4px;}
+      html,body{margin:0;padding:0;font-family:'Sarabun','Segoe UI',sans-serif;text-align:center;}
+      .wrap{position:relative;display:inline-block;line-height:0;max-width:100%;}
+      .wrap img{display:block;max-width:100%;max-height:285mm;}
+      .st{position:absolute;transform:rotate(-5deg);background:rgba(255,255,255,.82);border:2.5px solid #dc2626;color:#b91c1c;font-weight:900;font-size:20px;line-height:1.1;padding:3px 12px;border-radius:7px;white-space:nowrap;font-family:'Sarabun',sans-serif;letter-spacing:.4px;}
     </style></head><body>
-    <div class="hd">${title}${it.vol?(' · '+woH(String(it.vol))+' ตู้'):''} · เรือ ${woH(g.vessel||'-')}</div>
     <div class="wrap"><img src="${it.url}" onload="setTimeout(function(){window.focus();window.print();},150);" onerror="document.body.innerHTML='โหลดรูปไม่ได้';">${stamp}</div>
     </body></html>`);
   w.document.close();
@@ -3726,7 +3750,7 @@ function _bkgGalRender(dir){
   else { img.onload=()=>{ img.style.opacity='1'; }; img.src=it.url; }
 }
 function _bkgGalGo(d){ const g=_bkgGal, n=g.items.length; if(n<2){return;} g.idx=(g.idx+d+n)%n; _bkgGalRender(d); }
-function _bkgGalClose(){ ['bkgZoomBg','bkgVerBg','bkgViewBg','bkgGalBg'].forEach(id=>{ const p=document.getElementById(id); if(p) p.style.display='none'; }); }
+function _bkgGalClose(){ ['bkgZoomBg','bkgVerViewBg','bkgVerBg','bkgViewBg','bkgGalBg'].forEach(id=>{ const p=document.getElementById(id); if(p) p.style.display='none'; }); }
 
 // ── กล่องปั๊มเลขอินวอยซ์ทับรูป (แทนลายมือ) — ลากย้ายได้ จำตำแหน่งต่อบุคกิ้งใน ai_note ──
 /* ai_note = JSON รวม {sx,sy} (ตำแหน่งกล่องปั๊ม) + v (BKG version จากใบที่อัปล่าสุด) */
