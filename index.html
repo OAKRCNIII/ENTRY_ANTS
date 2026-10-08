@@ -3623,7 +3623,8 @@ function _bkgViewOne(idx){
         <button onclick="_bkgGalGo(-1)" style="margin-left:4px;padding:8px 14px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;font-weight:700;cursor:pointer;">←</button>
         <span id="bkgGalNum" style="font-size:13px;font-weight:800;color:#475569;"></span>
         <button onclick="_bkgGalGo(1)" style="padding:8px 14px;border:1px solid #1a3a6b;border-radius:9px;background:#1a3a6b;color:#fff;font-weight:700;cursor:pointer;">→</button>
-        <button onclick="_bkgViewPrint()" style="margin-left:auto;padding:8px 14px;border:1px solid #1a3a6b;border-radius:9px;background:#fff;color:#1a3a6b;font-weight:800;cursor:pointer;">🖨️ พิมพ์</button>
+        <button onclick="_bkgVerHistory()" title="ดูรูปเวอร์ชันเก่า" style="margin-left:auto;padding:8px 13px;border:1px solid #c7d2fe;border-radius:9px;background:#eef2ff;color:#3730a3;font-weight:800;cursor:pointer;">📜 เวอร์ชันรูป</button>
+        <button onclick="_bkgViewPrint()" style="padding:8px 14px;border:1px solid #1a3a6b;border-radius:9px;background:#fff;color:#1a3a6b;font-weight:800;cursor:pointer;">🖨️ พิมพ์</button>
         <button onclick="_bkgViewClose()" style="padding:8px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#64748b;font-weight:700;cursor:pointer;">✕ กลับแฟ้ม</button>
       </div>
     </div>
@@ -3634,6 +3635,42 @@ function _bkgViewOne(idx){
   requestAnimationFrame(()=>{ const cv=document.getElementById('bkgGalCover'); if(cv){ cv.style.opacity='1'; cv.style.boxShadow='0 30px 90px rgba(0,0,0,.55)'; } });
 }
 function _bkgViewClose(){ const p=document.getElementById('bkgViewBg'); if(p) p.style.display='none'; }
+/* ประวัติเวอร์ชันรูป — list ไฟล์ทั้งหมดใน storage โฟลเดอร์ของบุคกิ้ง (รูปเก่าไม่ถูกลบตอนอัปใหม่) */
+async function _bkgVerHistory(){
+  const g=_bkgGal, it=g.items[g.idx]; if(!it){ return; }
+  const safe=String(it.bkg).replace(/[^0-9A-Za-z_-]/g,'_');
+  let files;
+  try{
+    const r=await sb.storage.from('bkg_confirmations').list(safe,{limit:100,sortBy:{column:'created_at',order:'desc'}});
+    if(r.error) throw r.error;
+    files=(r.data||[]).filter(f=>f.name && f.name.indexOf('.')>0);
+  }catch(e){ alert('โหลดประวัติไม่ได้: '+(e.message||e)); return; }
+  if(!files.length){ alert('ไม่พบไฟล์รูปของบุคกิ้งนี้'); return; }
+  const paths=files.map(f=>safe+'/'+f.name);
+  let urls=[];
+  try{ const s=await sb.storage.from('bkg_confirmations').createSignedUrls(paths,600); if(!s.error) urls=(s.data||[]).map(d=>d&&d.signedUrl||''); }catch(e){}
+  const curPath=(BKG_CONF[String(it.bkg).trim()]||{}).image_path||'';
+  const cards=files.map((f,i)=>{
+    const dt=(()=>{ try{ const t=f.created_at?new Date(f.created_at):new Date(parseInt(f.name)); return t.toLocaleString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return f.name; } })();
+    const isCur=(safe+'/'+f.name)===curPath;
+    const u=urls[i]||'';
+    const isPdf=/\.pdf$/i.test(f.name);
+    const thumb=u? (isPdf?`<div style="height:150px;display:flex;align-items:center;justify-content:center;font-size:34px;background:#f1f5f9;">📄</div>`:`<img src="${u}" style="width:100%;height:150px;object-fit:cover;display:block;background:#0f172a;">`) : `<div style="height:150px;background:#f1f5f9;"></div>`;
+    return `<div onclick="${u?`_bkgZoom('${u}')`:''}" style="border:2px solid ${isCur?'#16a34a':'#e2e8f0'};border-radius:10px;overflow:hidden;cursor:${u?'zoom-in':'default'};position:relative;">
+      ${isCur?`<div style="position:absolute;top:5px;left:5px;z-index:2;font-size:10px;font-weight:800;color:#fff;background:#16a34a;border-radius:5px;padding:1px 6px;">ล่าสุด</div>`:''}
+      ${thumb}
+      <div style="padding:6px 9px;font-size:11px;color:#475569;font-weight:700;">#${files.length-i} · ${woH(dt)}</div>
+    </div>`;
+  }).join('');
+  let bg=document.getElementById('bkgVerBg');
+  if(!bg){ bg=document.createElement('div'); bg.id='bkgVerBg'; bg.style.cssText='position:fixed;inset:0;background:rgba(8,12,24,.9);display:flex;align-items:center;justify-content:center;z-index:100008;'; bg.onclick=e=>{if(e.target===bg)bg.style.display='none';}; document.body.appendChild(bg); }
+  bg.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;width:min(780px,95vw);max-height:90vh;overflow:auto;box-shadow:0 30px 90px rgba(0,0,0,.55);">
+    <div style="padding:14px 18px;background:#3730a3;color:#fff;font-weight:800;font-size:15px;">📜 ประวัติเวอร์ชันรูป · บุคกิ้ง ${woH(it.bkg)} <span style="font-weight:400;opacity:.85;font-size:12.5px;">(${files.length} ไฟล์ · ใหม่→เก่า · คลิกดูใหญ่)</span></div>
+    <div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">${cards}</div>
+    <div style="padding:0 16px 16px;"><button onclick="document.getElementById('bkgVerBg').style.display='none'" style="width:100%;padding:11px;border:none;border-radius:9px;background:#1a3a6b;color:#fff;font-weight:800;cursor:pointer;">ปิด</button></div>
+  </div>`;
+  bg.style.display='flex';
+}
 /* พิมพ์ใบ BKG ใบปัจจุบัน + กล่องปั๊มเลขอินวอยซ์ (ตามตำแหน่งที่บันทึก) */
 function _bkgViewPrint(){
   const g=_bkgGal, it=g.items[g.idx]; if(!it||!it.url){ alert('ยังไม่มีรูป'); return; }
@@ -3689,7 +3726,7 @@ function _bkgGalRender(dir){
   else { img.onload=()=>{ img.style.opacity='1'; }; img.src=it.url; }
 }
 function _bkgGalGo(d){ const g=_bkgGal, n=g.items.length; if(n<2){return;} g.idx=(g.idx+d+n)%n; _bkgGalRender(d); }
-function _bkgGalClose(){ ['bkgZoomBg','bkgViewBg','bkgGalBg'].forEach(id=>{ const p=document.getElementById(id); if(p) p.style.display='none'; }); }
+function _bkgGalClose(){ ['bkgZoomBg','bkgVerBg','bkgViewBg','bkgGalBg'].forEach(id=>{ const p=document.getElementById(id); if(p) p.style.display='none'; }); }
 
 // ── กล่องปั๊มเลขอินวอยซ์ทับรูป (แทนลายมือ) — ลากย้ายได้ จำตำแหน่งต่อบุคกิ้งใน ai_note ──
 /* ai_note = JSON รวม {sx,sy} (ตำแหน่งกล่องปั๊ม) + v (BKG version จากใบที่อัปล่าสุด) */
