@@ -3627,7 +3627,8 @@ function _bkgViewOne(idx){
         <button onclick="_bkgGalGo(-1)" style="padding:8px 14px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;font-weight:700;cursor:pointer;">←</button>
         <span id="bkgGalNum" style="font-size:13px;font-weight:800;color:#475569;"></span>
         <button onclick="_bkgGalGo(1)" style="padding:8px 14px;border:1px solid #1a3a6b;border-radius:9px;background:#1a3a6b;color:#fff;font-weight:700;cursor:pointer;">→</button>
-        <button onclick="_bkgViewClose()" style="margin-left:auto;padding:8px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#64748b;font-weight:700;cursor:pointer;">✕ กลับแฟ้ม</button>
+        <button onclick="_bkgViewPrint()" style="margin-left:auto;padding:8px 14px;border:1px solid #1a3a6b;border-radius:9px;background:#fff;color:#1a3a6b;font-weight:800;cursor:pointer;">🖨️ พิมพ์</button>
+        <button onclick="_bkgViewClose()" style="padding:8px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#64748b;font-weight:700;cursor:pointer;">✕ กลับแฟ้ม</button>
       </div>
     </div>
   </div>`;
@@ -3637,6 +3638,29 @@ function _bkgViewOne(idx){
   requestAnimationFrame(()=>{ const cv=document.getElementById('bkgGalCover'); if(cv){ cv.style.opacity='1'; cv.style.boxShadow='0 30px 90px rgba(0,0,0,.55)'; } });
 }
 function _bkgViewClose(){ const p=document.getElementById('bkgViewBg'); if(p) p.style.display='none'; }
+/* พิมพ์ใบ BKG ใบปัจจุบัน + กล่องปั๊มเลขอินวอยซ์ (ตามตำแหน่งที่บันทึก) */
+function _bkgViewPrint(){
+  const g=_bkgGal, it=g.items[g.idx]; if(!it||!it.url){ alert('ยังไม่มีรูป'); return; }
+  const p=it.inv?_bkgStampPos(it.bkg):null;
+  const stamp = (it.inv&&p) ? `<div class="st" style="left:${(p.sx*100).toFixed(2)}%;top:${(p.sy*100).toFixed(2)}%;">${woH(it.inv)}</div>` : '';
+  const title = `BKG ${woH(it.bkg)} ${it.inv?('· '+woH(it.inv)):''}`;
+  const w=window.open('','_blank','width=900,height=1200');
+  if(!w){ alert('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — อนุญาต popup ก่อน'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+    <style>
+      @page{margin:8mm;}
+      *{box-sizing:border-box;}
+      body{margin:0;font-family:'Sarabun','Segoe UI',sans-serif;}
+      .hd{font-size:13px;font-weight:700;color:#0f2a52;margin:0 0 6px;}
+      .wrap{position:relative;display:inline-block;width:100%;line-height:0;}
+      .wrap img{width:100%;display:block;}
+      .st{position:absolute;transform:translate(0,0) rotate(-5deg);background:rgba(255,255,255,.82);border:2.5px solid #dc2626;color:#b91c1c;font-weight:900;font-size:20px;line-height:1.1;padding:3px 12px;border-radius:7px;white-space:nowrap;font-family:'Sarabun',sans-serif;letter-spacing:.4px;}
+    </style></head><body>
+    <div class="hd">${title}${it.vol?(' · '+woH(String(it.vol))+' ตู้'):''} · เรือ ${woH(g.vessel||'-')}</div>
+    <div class="wrap"><img src="${it.url}" onload="setTimeout(function(){window.focus();window.print();},150);" onerror="document.body.innerHTML='โหลดรูปไม่ได้';">${stamp}</div>
+    </body></html>`);
+  w.document.close();
+}
 /* ซูมรูปในวิวเดี่ยว — เปลี่ยนขนาดจริง (wrap) ให้เลื่อนดูได้ กล่องปั๊ม(%)ตามอัตโนมัติ */
 let _bkgVZ=1;
 function _bkgViewZoom(set){
