@@ -3173,8 +3173,7 @@ function _bkgIcon(bkg, planVol){
   let ico, tip;
   if(!conf){ ico='❗'; tip='ยังไม่มีรูป BKG confirmation'; }
   else {
-    const vslOk = _normVsl(conf.vessel_name)===_normVsl(cur.vessel)
-               && String(conf.sail_date||'').substring(0,10)===String(cur.sailDate||'').substring(0,10);
+    const vslOk = _normVsl(conf.vessel_name)===_normVsl(cur.vessel);   /* เช็คชื่อเรือ(+voyage)พอ ไม่เทียบวันที่ — แก้วันเรือไม่ทำ BKG เด้งเป็น ❗/🔄 */
     const haveAiVol = conf.ai_vol!=null && conf.ai_vol!=='';
     const volOk = !haveAiVol || Number(conf.ai_vol)===Number(planVol||0);
     if(!vslOk){ ico='🔄'; tip='เรือในใบ BKG ไม่ตรงเรือลำนี้ ('+(conf.ai_vessel||conf.vessel_name||'-')+') — ย้าย/อัปใหม่'; }
@@ -3187,7 +3186,7 @@ function _bkgPopupClose(){ const p=document.getElementById('bkgConfPop'); if(p)p
 async function bkgConfClick(bkg){
   const b=String(bkg).trim(); const conf=BKG_CONF[b];
   const cur=loadSlotConfigs()[currentVslIdx]||{};
-  const stale=conf&&(_normVsl(conf.vessel_name)!==_normVsl(cur.vessel)||String(conf.sail_date||'').substring(0,10)!==String(cur.sailDate||'').substring(0,10));
+  const stale=conf&&(_normVsl(conf.vessel_name)!==_normVsl(cur.vessel));
   let bg=document.getElementById('bkgConfPop');
   if(!bg){ bg=document.createElement('div'); bg.id='bkgConfPop'; bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:99999;'; bg.onclick=e=>{if(e.target===bg)_bkgPopupClose();}; document.body.appendChild(bg); }
   const info = !conf ? '<span style="color:#dc2626;font-weight:700;">❗ ยังไม่มีรูป BKG — อัปผ่านปุ่ม 🤖 (AI จับคู่)</span>'
