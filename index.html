@@ -3152,13 +3152,12 @@ async function loadBkgConf(){
     (data||[]).forEach(r=>{ BKG_CONF[String(r.bkg_no||'').trim()] = r; });
   }catch(e){ BKG_CONF={}; console.warn('bkg_confirmations ยังไม่มี (รัน SQL ก่อน):', e.message); }
 }
-/* ย้ายเรือ/ซอยบุคกิ้ง → ลบรูปยืนยันเดิมทิ้ง → บังคับอัปใหม่ทุกครั้ง (กลับเป็น ❗) */
+/* ย้ายเรือ/ซอยบุคกิ้ง → ลบ conf (ไอคอนเป็น ❗ บังคับอัปใหม่) แต่ **เก็บไฟล์รูปเก่าไว้**
+   ใน storage เพื่อให้ประวัติเวอร์ชันรูป (📜) ยังเห็นได้ — ไม่ remove ไฟล์ */
 async function invalidateBkgConf(bkg){
   const b=String(bkg||'').trim(); if(!b) return;
-  const conf=BKG_CONF[b];
   delete BKG_CONF[b];   // เอาออกทันที → ไอคอนเป็น ❗ เดี๋ยวนั้น
   try{
-    if(conf&&conf.image_path){ await sb.storage.from('bkg_confirmations').remove([conf.image_path]); }
     await sb.from('bkg_confirmations').delete().eq('bkg_no', b);
   }catch(e){ console.warn('invalidateBkgConf:', e.message); }
 }
