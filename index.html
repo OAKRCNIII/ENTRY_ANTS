@@ -5075,8 +5075,8 @@ async function _bkgPlanAlerts(){
     if(!c){ o.wait.push(b); return; }
     const vslOk=_normVsl(c.vessel_name)===k;
     const volOk=(c.ai_vol==null||c.ai_vol==='')||Number(c.ai_vol)===Number(p.vol||0);
-    if(!vslOk) o.mis.push(`${b} (ใบ: ${c.ai_vessel||c.vessel_name||'-'})`);
-    else if(!volOk) o.mis.push(`${b} (ใบ ${c.ai_vol} ตู้ / แผน ${p.vol})`);
+    if(!vslOk) o.mis.push(`${b} (ใบเป็นเรือ ${c.ai_vessel||c.vessel_name||'-'})`);
+    else if(!volOk) o.mis.push(`${b} (ใบ ${c.ai_vol} / แผน ${p.vol} ตู้)`);
   });
   /* ❓ ใบที่ไม่มีในแผน — เฉพาะใบที่อัปเดตใน 21 วัน และไม่อยู่ในตาราง vessels (DATABASE) */
   const cut=Date.now()-21*864e5;
@@ -5136,8 +5136,8 @@ async function renderVslOverview(){
   html += `<div style="display:flex;flex-direction:column;gap:10px;">`;
   sums.forEach(s=>{
     const _va = (_al && _al.byVsl[_normVsl(s.vessel)]) || {wait:[],mis:[]};
-    const waitBadge = _va.wait.length ? `<span title="ยังไม่มีใบ BKG: ${h(_va.wait.join(', '))}" style="background:#fef2f2;color:#b91c1c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">⏳ รอใบ BKG ${_va.wait.length}</span>` : '';
-    const misBadge  = _va.mis.length  ? `<span title="ใบเดิมไม่ตรงแผน รอใบใหม่: ${h(_va.mis.join(' | '))}" style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🔄 รอใบใหม่ ${_va.mis.length}</span>` : '';
+    const waitBadge = _va.wait.length ? `<span title="ยังไม่มีใบ BKG" style="background:#fef2f2;color:#b91c1c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">⏳ รอใบ BKG: ${h(_va.wait.join(', '))}</span>` : '';
+    const misBadge  = _va.mis.length  ? `<span title="ใบเดิมไม่ตรงแผน — รอใบใหม่ หรือแก้แผน" style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🔄 รอใบใหม่: ${h(_va.mis.join(', '))}</span>` : '';
     const total = s.invSum + s.loySum;
     const loyBadge = s.loySum>0
       ? `<span style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🟠 ลอย ${s.loySum} ตู้</span>`
