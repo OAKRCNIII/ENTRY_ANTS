@@ -3622,7 +3622,7 @@ function _bkgGalSpread(){
     ${g.items.map((it,i)=>`
       <div class="bkgcard" onclick="_bkgViewOne(${i})" style="opacity:0;transform:translateY(-${120+(i%3)*14}px) scale(.5) rotate(${(i%2?8:-8)}deg);transition:opacity .5s ease, transform .68s cubic-bezier(.22,1.12,.36,1), box-shadow .3s ease;transition-delay:${i*75}ms;background:#fff;border-radius:11px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.42);cursor:pointer;">
         <div style="background:#1a3a6b;color:#fff;padding:7px 10px;font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${woH(it.label)}</div>
-        <div style="background:#0f172a;height:196px;overflow:hidden;"><img src="${it.url}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+        <div style="background:#0f172a;height:196px;overflow:hidden;">${/\.pdf$/i.test(it.path||'')?`<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:#f1f5f9;color:#64748b;"><div style="font-size:42px;line-height:1;">📄</div><div style="font-size:11px;font-weight:800;">PDF · คลิกเปิด</div></div>`:`<img src="${it.url}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;">`}</div>
         <div style="padding:6px 10px;font-size:10.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">BKG ${woH(it.bkg)}</div>
       </div>`).join('')}
     </div>`;
@@ -3643,6 +3643,7 @@ function _bkgViewOne(idx){
           <img id="bkgGalImg" ondblclick="_bkgViewZoom('toggle')" title="ดับเบิลคลิกเพื่อซูม" style="max-width:100%;max-height:84vh;display:block;transition:opacity .3s ease;cursor:zoom-in;" alt="BKG">
           <div id="bkgGalStamp" title="ลากเพื่อย้ายตำแหน่ง" style="position:absolute;display:none;transform:rotate(-5deg);background:rgba(255,255,255,.78);border:2.5px solid #dc2626;color:#b91c1c;font-weight:900;font-size:clamp(13px,2.2vw,20px);line-height:1.1;padding:3px 11px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.3);font-family:'Sarabun','Segoe UI',sans-serif;white-space:nowrap;letter-spacing:.5px;cursor:move;user-select:none;touch-action:none;z-index:3;"></div>
         </span>
+        <div id="bkgGalPdf" style="display:none;width:100%;"></div>
       </div>
       <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;background:#f1f5f9;flex-wrap:wrap;">
         <span style="font-size:11px;color:#94a3b8;">ดับเบิลคลิกรูปเพื่อซูม</span>
@@ -3769,6 +3770,15 @@ function _bkgGalRender(dir){
   const cap=document.getElementById('bkgGalCap'), img=document.getElementById('bkgGalImg'), num=document.getElementById('bkgGalNum');
   if(cap) cap.innerHTML=`📎 ${woH(it.label)} <span style="opacity:.8;font-weight:600;font-size:12.5px;">· เรือ ${woH(g.vessel||'-')} · BKG ${woH(it.bkg)}${it.vol?' · '+woH(String(it.vol))+' ตู้':''}</span>`;
   if(num) num.textContent=`${g.idx+1} / ${g.items.length}`;
+  const wrap=document.getElementById('bkgGalImgWrap'), pdf=document.getElementById('bkgGalPdf');
+  if(/\.pdf$/i.test(it.path||'')){   /* ไฟล์ PDF (จากเมล) → iframe ไม่ใช่ img */
+    _bkgStampApply(null);
+    if(wrap) wrap.style.display='none';
+    if(pdf){ pdf.style.display='block'; pdf.innerHTML=`<iframe src="${it.url}" style="width:100%;height:80vh;border:none;background:#fff;"></iframe>`; }
+    return;
+  }
+  if(pdf){ pdf.style.display='none'; pdf.innerHTML=''; }
+  if(wrap) wrap.style.display='inline-block';
   _bkgStampApply(it);
   if(document.getElementById('bkgGalScroll')) _bkgViewZoom('reset');
   if(!img) return;
