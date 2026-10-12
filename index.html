@@ -489,6 +489,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
         <button class="vsl-draft-btn" id="vslDraftBtn" onclick="saveAllDraft()">📋 บันทึก Draft ทั้ง 10 ลำ</button>
         <button type="button" onclick="openBkgHistory('')" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:700;color:#0f2a52;cursor:pointer;white-space:nowrap;">📜 ประวัติบุคกิ้ง</button>
         <button type="button" onclick="_bkgAiUpload()" style="padding:7px 14px;border:1px solid #6ee7b7;background:#ecfdf5;border-radius:9px;font-size:13px;font-weight:700;color:#047857;cursor:pointer;white-space:nowrap;">🤖 อัป BKG (AI จับคู่)</button>
+        <button type="button" id="gmailSyncBtn" onclick="gmailBkgSync()" title="ดึงใบ BKG ล่าสุดจาก Gmail เข้าระบบ (admin)" style="display:none;padding:7px 14px;border:1px solid #fca5a5;background:#fef2f2;border-radius:9px;font-size:13px;font-weight:700;color:#b91c1c;cursor:pointer;white-space:nowrap;">📧 SYNC GMAIL</button>
         <button type="button" onclick="openBkgGallery()" style="padding:7px 14px;border:1px solid #93c5fd;background:#eff6ff;border-radius:9px;font-size:13px;font-weight:700;color:#1d4ed8;cursor:pointer;white-space:nowrap;">📂 ดูรูป BKG ทั้งหมด</button>
         <button type="button" onclick="printVesselReport()" style="padding:7px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:700;color:#0f2a52;cursor:pointer;white-space:nowrap;">🖨️ พิมพ์รีพอร์ต</button>
       </div>
@@ -950,6 +951,7 @@ function _applySession(u){
   document.getElementById('app').style.display='block';
   document.getElementById('userChip').textContent = '👤 ' + uname;
   _updateMaintBtn(); _logLogin(uname);
+  { const gb=document.getElementById('gmailSyncBtn'); if(gb) gb.style.display=(USER_ROLE==='admin')?'':'none'; }
   applyRoleTabs(role);
   initApp();
 }
@@ -3320,6 +3322,32 @@ async function _bkgExpandFiles(files){
 }
 // ── ถาดรวมรูป: วาง (Ctrl+V) / ลากวาง / เลือกไฟล์ สะสมหลายรูป แล้วกดทีเดียว ──
 let _bkgStage=[], _bkgPasteHandler=null;
+/* 📧 SYNC GMAIL — สั่ง Edge gmail-bkg-sync ดึงใบ BKG ล่าสุดจาก Gmail (สิทธิ์ Gmail อยู่ฝั่ง server เท่านั้น)
+   server เช็คสิทธิ์ admin (dash_money_acl) + DKIM ผู้ส่ง + กันกดรัว 1 นาที · แตะแค่ใบ BKG ไม่แตะแผน */
+let _gmailSyncBusy=false;
+async function gmailBkgSync(){
+  if(_gmailSyncBusy) return;
+  const btn=document.getElementById('gmailSyncBtn');
+  _gmailSyncBusy=true; if(btn){ btn.disabled=true; btn.textContent='📧 กำลังดึงเมล…'; }
+  try{
+    const r=await fetch(SB_URL+'/functions/v1/gmail-bkg-sync',{method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':await _fnAuth()},
+      body:JSON.stringify({days:3})});
+    const d=await r.json().catch(()=>({error:'ตอบกลับผิดรูปแบบ ('+r.status+')'}));
+    if(!r.ok || d.error){ alert('📧 SYNC GMAIL ไม่สำเร็จ: '+(d.error||r.status)+(d.retry_in_s?' (อีก '+d.retry_in_s+' วิ)':'')); return; }
+    await loadBkgConf(); _refreshPlannerTables();
+    const IC={ok:'✅',unchanged:'⏸',vslmis:'🔄',volmis:'⚠️',notfound:'❓',unreadable:'🚫',deferred:'⏳',error:'❌'};
+    const TX={ok:'อัปเดตแล้ว ตรงแผน',unchanged:'ไม่เปลี่ยน',vslmis:'เรือไม่ตรงแผน',volmis:'ตู้ไม่ตรงแผน',notfound:'ยังไม่มีในแผน',unreadable:'อ่านไม่ออก',deferred:'รอรอบถัดไป',error:'ผิดพลาด'};
+    const rows=(d.results||[]).filter(x=>x.status!=='unchanged');
+    const lines=rows.map(x=>`${IC[x.status]||'•'} ${x.booking}${x.version?' v'+x.version:''} · ${x.vol??'-'} ตู้ · ${x.vessel||'-'}${x.invoice?' · '+x.invoice:''} — ${TX[x.status]||x.status}`);
+    const same=(d.results||[]).filter(x=>x.status==='unchanged').length;
+    alert(`📧 SYNC GMAIL เสร็จ (${d.days} วันล่าสุด)\nสแกน ${d.scanned} เมล · ${d.bookings} บุคกิ้ง`+
+      (same?` · ไม่เปลี่ยน ${same}`:'')+(d.already_done?` · ทำไปแล้ว ${d.already_done}`:'')+(d.auth_fail?`\n🚫 เมลไม่ผ่าน DKIM (ข้าม) ${d.auth_fail}`:'')+
+      (lines.length?'\n\n'+lines.join('\n'):'\n\nไม่มีใบใหม่')+
+      (rows.some(x=>x.status==='deferred')?'\n\n⏳ กดอีกครั้งเพื่อทำส่วนที่เหลือ':''));
+  }catch(e){ alert('📧 SYNC GMAIL ผิดพลาด: '+(e.message||e)); }
+  finally{ _gmailSyncBusy=false; if(btn){ btn.disabled=false; btn.textContent='📧 SYNC GMAIL'; } }
+}
 function _bkgAiUpload(){
   _bkgStage=[];
   _bkgStageShow();
