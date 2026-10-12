@@ -3148,7 +3148,7 @@ let BKG_CONF = {};   /* bkg_no(trim) → {vessel_name, sail_date, image_path, st
 async function loadBkgConf(){
   try{
     const { data, error } = await sb.from('bkg_confirmations')
-      .select('bkg_no,vessel_name,sail_date,image_path,status,ai_vessel,ai_bkg,ai_vol,ai_note');
+      .select('bkg_no,vessel_name,sail_date,image_path,status,ai_vessel,ai_bkg,ai_vol,ai_note,updated_at');
     if(error) throw error;
     BKG_CONF = {};
     (data||[]).forEach(r=>{ BKG_CONF[String(r.bkg_no||'').trim()] = r; });
@@ -5055,6 +5055,41 @@ async function computeVesselSummaries(){
     return {...s, invSum, loySum, dbOk, hasDraft};
   }));
 }
+/* ⏳/❓ แจ้งเตือน BKG ในหน้าสรุปแพลนเรือ (RCN 12 ต.ค.69)
+   ต่อเรือ: ⏳ รอใบ BKG (ยังไม่มีใบ) · 🔄 รอใบใหม่ (ใบเดิมเรือ/ตู้ไม่ตรงแผน)
+   รวมทั้งหน้า: ❓ มีใบ BKG แล้ว (เมล/อัป) แต่บุคกิ้งนี้ยังไม่อยู่ในแผนและไม่อยู่ใน DATABASE */
+async function _bkgPlanAlerts(){
+  if(!BKG_CONF || !Object.keys(BKG_CONF).length){ try{ await loadBkgConf(); }catch(e){} }
+  const plan={};   /* bkg → {vessel, vol} : DB (WEB) ก่อน แล้วทับด้วยร่างในเครื่อง (ใหม่กว่า) */
+  try{
+    const since=new Date(Date.now()-10*864e5).toISOString().slice(0,10);
+    const { data } = await sb.from('vessel_plan').select('bkg_no,vessel_name,vol').eq('sheet_name','WEB').gte('sail_date',since);
+    (data||[]).forEach(r=>{ const b=String(r.bkg_no||'').trim(); if(b) plan[b]={vessel:r.vessel_name,vol:Number(r.vol||0)}; });
+  }catch(e){}
+  try{ const loc=_bkgAllPlanRows(); Object.keys(loc).forEach(b=>{ plan[b]={vessel:loc[b].vessel,vol:loc[b].vol}; }); }catch(e){}
+  const byVsl={};   /* normVsl → {wait:[], mis:[]} */
+  Object.keys(plan).forEach(b=>{
+    const p=plan[b], k=_normVsl(p.vessel); if(!k) return;
+    const o=byVsl[k]||(byVsl[k]={wait:[],mis:[]});
+    const c=BKG_CONF[b];
+    if(!c){ o.wait.push(b); return; }
+    const vslOk=_normVsl(c.vessel_name)===k;
+    const volOk=(c.ai_vol==null||c.ai_vol==='')||Number(c.ai_vol)===Number(p.vol||0);
+    if(!vslOk) o.mis.push(`${b} (ใบ: ${c.ai_vessel||c.vessel_name||'-'})`);
+    else if(!volOk) o.mis.push(`${b} (ใบ ${c.ai_vol} ตู้ / แผน ${p.vol})`);
+  });
+  /* ❓ ใบที่ไม่มีในแผน — เฉพาะใบที่อัปเดตใน 21 วัน และไม่อยู่ในตาราง vessels (DATABASE) */
+  const cut=Date.now()-21*864e5;
+  let orphans=Object.values(BKG_CONF).filter(c=>{ const b=String(c.bkg_no||'').trim(); return b && !plan[b] && (Date.parse(c.updated_at||'')||0)>=cut; });
+  if(orphans.length){
+    try{
+      const { data } = await sb.from('vessels').select('booking_no').in('booking_no', orphans.map(c=>String(c.bkg_no).trim()));
+      const inDb=new Set((data||[]).map(r=>String(r.booking_no||'').trim()));
+      orphans=orphans.filter(c=>!inDb.has(String(c.bkg_no).trim()));
+    }catch(e){}
+  }
+  return { byVsl, orphans };
+}
 async function renderVslOverview(){
   const wrap = document.getElementById('vslOverview'); if(!wrap) return;
   wrap.innerHTML = `<div style="text-align:center;padding:26px;color:#94a3b8;font-size:14px;">⏳ กำลังโหลดสรุปแพลนเรือ...</div>`;
@@ -5079,6 +5114,7 @@ async function renderVslOverview(){
   { const _sn=new Set(); sums=sums.filter(s=>{ const k=(s.vessel||'').trim().toUpperCase()+'|'+(s.date||''); if(_sn.has(k))return false; _sn.add(k); return true; }); }
   sums.sort((a,b)=> String(a.date||'9999-99-99').localeCompare(String(b.date||'9999-99-99')));   /* วันเรือใกล้สุดขึ้นบนสุด */
   const fmtDate = d => { if(!d) return '-'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; };
+  let _al=null; try{ _al=await _bkgPlanAlerts(); }catch(e){ _al=null; }
   let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;font-size:19px;color:#0f2a52;">🚢 สรุปแพลนเรือทั้งหมด${sums.length?` (${sums.length} ลำ)`:''}</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -5091,8 +5127,17 @@ async function renderVslOverview(){
     html += `<div style="text-align:center;padding:34px;color:#94a3b8;font-size:14px;border:1px dashed #d7dee8;border-radius:12px;">ยังไม่มีเรือในแพลน — กด "🔄 รีเฟรช" หรือเพิ่มเรือก่อน</div>`;
     wrap.innerHTML = html; return;
   }
+  if(_al && _al.orphans.length){
+    const items=_al.orphans.map(c=>`<div style="padding:3px 0;">❓ <b>${h(c.bkg_no)}</b> · ${h(c.ai_vessel||c.vessel_name||'-')} · ${c.ai_vol??'-'} ตู้${(()=>{try{const n=JSON.parse(c.ai_note||'{}');return n.v?' · v'+h(n.v):'';}catch(e){return '';}})()}</div>`).join('');
+    html += `<div style="margin-bottom:12px;padding:12px 16px;border:1px solid #fcd34d;background:#fffbeb;border-radius:12px;color:#92400e;font-size:13.5px;">
+      <div style="font-weight:800;margin-bottom:4px;">❓ มีใบ BKG แล้ว แต่ยังไม่มีในแผน (${_al.orphans.length})</div>${items}
+      <div style="font-size:12px;color:#b45309;margin-top:4px;">→ เปิดเรือลำนั้นแล้วเพิ่มบุคกิ้งลงแผน (อินวอยซ์หรือลอย)</div></div>`;
+  }
   html += `<div style="display:flex;flex-direction:column;gap:10px;">`;
   sums.forEach(s=>{
+    const _va = (_al && _al.byVsl[_normVsl(s.vessel)]) || {wait:[],mis:[]};
+    const waitBadge = _va.wait.length ? `<span title="ยังไม่มีใบ BKG: ${h(_va.wait.join(', '))}" style="background:#fef2f2;color:#b91c1c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">⏳ รอใบ BKG ${_va.wait.length}</span>` : '';
+    const misBadge  = _va.mis.length  ? `<span title="ใบเดิมไม่ตรงแผน รอใบใหม่: ${h(_va.mis.join(' | '))}" style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🔄 รอใบใหม่ ${_va.mis.length}</span>` : '';
     const total = s.invSum + s.loySum;
     const loyBadge = s.loySum>0
       ? `<span style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🟠 ลอย ${s.loySum} ตู้</span>`
@@ -5103,6 +5148,7 @@ async function renderVslOverview(){
           <div style="font-size:12.5px;color:#64748b;margin-top:3px;">📅 เรือวันที่ ${fmtDate(s.date)}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+          ${waitBadge}${misBadge}
           <span style="background:#eff6ff;color:#1d4ed8;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🔗 จับคู่แล้ว ${s.invSum} ตู้</span>
           ${loyBadge}
           <span style="background:#f1f5f9;color:#334155;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">Σ ${total} ตู้</span>
