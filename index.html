@@ -3622,13 +3622,15 @@ function _bkgGalSpread(){
     ${g.items.map((it,i)=>`
       <div class="bkgcard" onclick="_bkgViewOne(${i})" style="opacity:0;transform:translateY(-${120+(i%3)*14}px) scale(.5) rotate(${(i%2?8:-8)}deg);transition:opacity .5s ease, transform .68s cubic-bezier(.22,1.12,.36,1), box-shadow .3s ease;transition-delay:${i*75}ms;background:#fff;border-radius:11px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.42);cursor:pointer;">
         <div style="background:#1a3a6b;color:#fff;padding:7px 10px;font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${woH(it.label)}</div>
-        <div style="background:#0f172a;height:196px;overflow:hidden;">${/\.pdf$/i.test(it.path||'')?`<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:#f1f5f9;color:#64748b;"><div style="font-size:42px;line-height:1;">📄</div><div style="font-size:11px;font-weight:800;">PDF · คลิกเปิด</div></div>`:`<img src="${it.url}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;">`}</div>
+        <div id="bkgcardimg_${i}" style="background:#0f172a;height:196px;overflow:hidden;">${/\.pdf$/i.test(it.path||'')?`<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:#f1f5f9;color:#64748b;"><div style="font-size:30px;line-height:1;">⏳</div><div style="font-size:10.5px;font-weight:800;">กำลังเตรียมรูป...</div></div>`:`<img src="${it.url}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;">`}</div>
         <div style="padding:6px 10px;font-size:10.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">BKG ${woH(it.bkg)}</div>
       </div>`).join('')}
     </div>`;
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     sp.querySelectorAll('.bkgcard').forEach(c=>{ c.style.opacity='1'; c.style.transform='translateY(0) scale(1) rotate(0deg)'; });
   }));
+  /* เรนเดอร์ thumbnail ของไฟล์ PDF (จากเมล) แทน ⏳ */
+  g.items.forEach((it,i)=>{ if(/\.pdf$/i.test(it.path||'')){ _bkgPdfToImage(it.url).then(d=>{ const el=document.getElementById('bkgcardimg_'+i); if(el&&d) el.innerHTML=`<img src="${d}" style="width:100%;height:100%;object-fit:cover;object-position:top;display:block;">`; else if(el) el.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:34px;background:#f1f5f9;color:#64748b;">📄</div>'; }); } });
 }
 /* วิวเดี่ยว (พลิกเปิด + กล่องปั๊ม + เลื่อนใบ) — เปิดซ้อนบนสเปรด */
 function _bkgViewOne(idx){
@@ -3725,13 +3727,17 @@ async function _bkgVerHistory(){
   bg.style.display='flex';
 }
 /* พิมพ์ใบ BKG ใบปัจจุบัน + กล่องปั๊มเลขอินวอยซ์ (ตามตำแหน่งที่บันทึก) */
-function _bkgViewPrint(){
+async function _bkgViewPrint(){
   const g=_bkgGal, it=g.items[g.idx]; if(!it||!it.url){ alert('ยังไม่มีรูป'); return; }
+  const w=window.open('','_blank','width=900,height=1200');   /* เปิดก่อน await กัน popup block */
+  if(!w){ alert('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — อนุญาต popup ก่อน'); return; }
+  try{ w.document.write('<!doctype html><meta charset="utf-8"><title>กำลังเตรียม...</title><body style="font-family:sans-serif;padding:40px;color:#475569;">กำลังเตรียมเอกสาร...</body>'); }catch(e){}
+  const src = /\.pdf$/i.test(it.path||'') ? await _bkgPdfToImage(it.url) : it.url;
+  if(!src){ try{ w.document.body.innerHTML='เตรียมเอกสารไม่ได้'; }catch(e){} return; }
   const p=it.inv?_bkgStampPos(it.bkg):null;
   const stamp = (it.inv&&p) ? `<div class="st" style="left:${(p.sx*100).toFixed(2)}%;top:${(p.sy*100).toFixed(2)}%;">${woH(it.inv)}</div>` : '';
   const title = `BKG ${woH(it.bkg)} ${it.inv?('· '+woH(it.inv)):''}`;
-  const w=window.open('','_blank','width=900,height=1200');
-  if(!w){ alert('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — อนุญาต popup ก่อน'); return; }
+  w.document.open();
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
     <style>
       @page{margin:6mm;}
@@ -3741,7 +3747,7 @@ function _bkgViewPrint(){
       .wrap img{display:block;height:282mm;width:auto;max-width:100%;}
       .st{position:absolute;transform:rotate(-5deg);background:rgba(255,255,255,.82);border:2.5px solid #dc2626;color:#b91c1c;font-weight:900;font-size:20px;line-height:1.1;padding:3px 12px;border-radius:7px;white-space:nowrap;font-family:'Sarabun',sans-serif;letter-spacing:.4px;}
     </style></head><body>
-    <div class="wrap"><img src="${it.url}" onload="setTimeout(function(){window.focus();window.print();},150);" onerror="document.body.innerHTML='โหลดรูปไม่ได้';">${stamp}</div>
+    <div class="wrap"><img src="${src}" onload="setTimeout(function(){window.focus();window.print();},150);" onerror="document.body.innerHTML='โหลดรูปไม่ได้';">${stamp}</div>
     </body></html>`);
   w.document.close();
 }
@@ -3771,10 +3777,16 @@ function _bkgGalRender(dir){
   if(cap) cap.innerHTML=`📎 ${woH(it.label)} <span style="opacity:.8;font-weight:600;font-size:12.5px;">· เรือ ${woH(g.vessel||'-')} · BKG ${woH(it.bkg)}${it.vol?' · '+woH(String(it.vol))+' ตู้':''}</span>`;
   if(num) num.textContent=`${g.idx+1} / ${g.items.length}`;
   const wrap=document.getElementById('bkgGalImgWrap'), pdf=document.getElementById('bkgGalPdf');
-  if(/\.pdf$/i.test(it.path||'')){   /* ไฟล์ PDF (จากเมล) → iframe ไม่ใช่ img */
-    _bkgStampApply(null);
-    if(wrap) wrap.style.display='none';
-    if(pdf){ pdf.style.display='block'; pdf.innerHTML=`<iframe src="${it.url}" style="width:100%;height:80vh;border:none;background:#fff;"></iframe>`; }
+  if(/\.pdf$/i.test(it.path||'')){   /* PDF (จากเมล) → เรนเดอร์เป็นรูปด้วย pdf.js ให้ปั๊ม/ซูม/พิมพ์ได้ */
+    if(pdf){ pdf.style.display='none'; pdf.innerHTML=''; }
+    if(wrap) wrap.style.display='inline-block';
+    _bkgStampApply(it);
+    if(!img) return;
+    img.style.opacity='.25';
+    _bkgPdfToImage(it.url).then(durl=>{
+      if(durl){ img.onload=()=>{ img.style.opacity='1'; }; img.src=durl; if(document.getElementById('bkgGalScroll')) _bkgViewZoom('reset'); }
+      else { if(wrap)wrap.style.display='none'; if(pdf){ pdf.style.display='block'; pdf.innerHTML=`<iframe src="${it.url}" style="width:100%;height:80vh;border:none;background:#fff;"></iframe>`; } }
+    });
     return;
   }
   if(pdf){ pdf.style.display='none'; pdf.innerHTML=''; }
@@ -3787,6 +3799,29 @@ function _bkgGalRender(dir){
 }
 function _bkgGalGo(d){ const g=_bkgGal, n=g.items.length; if(n<2){return;} g.idx=(g.idx+d+n)%n; _bkgGalRender(d); }
 function _bkgGalClose(){ ['bkgZoomBg','bkgVerViewBg','bkgVerBg','bkgViewBg','bkgGalBg'].forEach(id=>{ const p=document.getElementById(id); if(p) p.style.display='none'; }); }
+/* เรนเดอร์ PDF (จากเมล) → รูป PNG data URL (ทุกหน้าต่อกันแนวตั้ง) ด้วย pdf.js — ให้ปั๊ม/ซูม/พิมพ์ได้ */
+let _bkgPdfCache={};
+async function _bkgPdfToImage(url){
+  if(!url) return null;
+  if(_bkgPdfCache[url]) return _bkgPdfCache[url];
+  try{
+    await _loadPdfJs();
+    const buf=await (await fetch(url)).arrayBuffer();
+    const doc=await pdfjsLib.getDocument({data:buf}).promise;
+    const cs=[]; let W=0,H=0;
+    for(let i=1;i<=doc.numPages;i++){
+      const pg=await doc.getPage(i); const vp=pg.getViewport({scale:2});
+      const c=document.createElement('canvas'); c.width=vp.width; c.height=vp.height;
+      await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      cs.push(c); W=Math.max(W,c.width); H+=c.height;
+    }
+    const out=document.createElement('canvas'); out.width=W; out.height=H;
+    const ctx=out.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+    let y=0; for(const c of cs){ ctx.drawImage(c,0,y); y+=c.height; }
+    const durl=out.toDataURL('image/png');
+    _bkgPdfCache[url]=durl; return durl;
+  }catch(e){ console.warn('pdf render ไม่ได้:',e); return null; }
+}
 
 // ── กล่องปั๊มเลขอินวอยซ์ทับรูป (แทนลายมือ) — ลากย้ายได้ จำตำแหน่งต่อบุคกิ้งใน ai_note ──
 /* ai_note = JSON รวม {sx,sy} (ตำแหน่งกล่องปั๊ม) + v (BKG version จากใบที่อัปล่าสุด) */
