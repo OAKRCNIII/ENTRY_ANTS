@@ -4166,7 +4166,8 @@ async function confirmRevise(){
   if(!placed) tgt.push(moved);
   saveLoyRows(j, tgt);
   _queueBookingEvent({ booking_no: moved.bkg, event_type:'move', from_vessel:(loadSlotConfigs()[idx]||{}).vessel||'', to_vessel: tc.vessel||'', vol });
-  invalidateBkgConf(moved.bkg);   // ย้ายเรือ → บังคับอัปรูป BKG ใหม่
+  // เลิกลบ conf ตอนย้ายเรือ (14 ต.ค.69) — ไอคอน 🔄 เทียบใบ-แผนเตือนเอง + auto-ingest อัปใบใหม่ให้ (เดิมลบไปลบใบที่ถูกแล้วทิ้ง)
+  // invalidateBkgConf(moved.bkg);
   document.getElementById('reviseModal').style.display = 'none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));   // รีเฟรชลำนี้ → หายไป
   calcXlsTotals();
@@ -4235,7 +4236,8 @@ async function confirmReviseInv(){
   ['xi_inv_','xi_des_','xi_bkg_','xi_vol_'].forEach(p=>{ const el=document.getElementById(p+r); if(el) el.value=''; });
   saveInvDraft();
   _queueBookingEvent({ booking_no: bkg||inv, event_type:'move', from_vessel:(cfgs[idx]||{}).vessel||'', to_vessel: tc.vessel||'', vol, detail:'ย้ายอินวอยซ์ '+inv+(bkg?(' (BKG '+bkg+')'):'') });
-  if(bkg) invalidateBkgConf(bkg);   // ย้ายอินวอยซ์+BKG → บังคับอัปรูปใหม่
+  // เลิกลบ conf ตอนย้ายอินวอยซ์ (14 ต.ค.69) — ไอคอนเทียบเอง + auto-ingest อัปให้
+  // if(bkg) invalidateBkgConf(bkg);
   document.getElementById('reviseModal').style.display = 'none';
   document.getElementById('xlsInvBody').innerHTML = buildInvTableHtml(cfgs[idx]||{}, []);
   calcXlsTotals();
@@ -4301,7 +4303,8 @@ function confirmSplit(){
   compact.splice(compactIdx, 1, ...newRows);
   saveLoyRows(idx, compact);
   _queueBookingEvent({ booking_no: src.bkg, event_type:'split', vol: src.vol, detail:'แยกเป็น '+newRows.map(x=>x.bkg+'('+x.vol+')').join(', ') });
-  invalidateBkgConf(src.bkg);   // ซอยบุคกิ้ง → รูปเดิมใช้ไม่ได้ บังคับอัปใหม่ต่อบุคกิ้งย่อย
+  // เลิกลบ conf ตอนซอยบุคกิ้ง (14 ต.ค.69 — บัคที่ RCN เจอ) — ตัวที่เก็บเลขเดิม (src) ใบมักถูกแล้ว (สายเรือส่งใบตู้ที่ซอยแล้วมา) ไอคอน ⚠️ เทียบ vol เอง ไม่ต้องลบ
+  // invalidateBkgConf(src.bkg);
   newRows.forEach(x=>{ if(x.bkg!==src.bkg) _queueBookingEvent({ booking_no:x.bkg, event_type:'split_from', vol:x.vol, detail:'แยกมาจาก '+src.bkg }); });
   document.getElementById('splitModal').style.display = 'none';
   document.getElementById('xlsLoyBody').innerHTML = buildLoyTableHtml(loadLoyRows(idx));
