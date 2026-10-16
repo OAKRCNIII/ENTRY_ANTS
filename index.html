@@ -5250,18 +5250,21 @@ async function renderVslOverview(){
     const loyBadge = s.loySum>0
       ? `<span style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🟠 ลอย ${s.loySum} ตู้</span>`
       : `<span style="background:#f0fdf4;color:#15803d;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">✅ จัดครบ</span>`;
-    return `<button onclick="openVsl(${s.idx})" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 18px;border:1px solid #e2e8f0;border-left:5px solid ${p.c};background:#fff;border-radius:12px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='${p.bg}'" onmouseout="this.style.background='#fff'">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:16px;font-weight:800;color:#0f2a52;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h(s.vessel)}</div>
-          <div style="font-size:12.5px;color:#64748b;margin-top:3px;">📅 เรือวันที่ ${fmtDate(s.date)}</div>
+    const statusBadges = `${orpBadge}${waitBadge}${misBadge}`;
+    return `<button onclick="openVsl(${s.idx})" style="display:flex;flex-direction:column;gap:9px;width:100%;text-align:left;padding:14px 18px;border:1px solid #e2e8f0;border-left:5px solid ${p.c};background:#fff;border-radius:12px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='${p.bg}'" onmouseout="this.style.background='#fff'">
+        <div style="display:flex;align-items:center;gap:14px;width:100%;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:16px;font-weight:800;color:#0f2a52;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h(s.vessel)}</div>
+            <div style="font-size:12.5px;color:#64748b;margin-top:3px;white-space:nowrap;">📅 เรือวันที่ ${fmtDate(s.date)}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+            <span style="background:#eff6ff;color:#1d4ed8;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;white-space:nowrap;">🔗 จับคู่แล้ว ${s.invSum} ตู้</span>
+            ${loyBadge}
+            <span style="background:#f1f5f9;color:#334155;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;white-space:nowrap;">Σ ${total} ตู้</span>
+            <span style="font-size:22px;color:#94a3b8;line-height:1;">›</span>
+          </div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-          ${orpBadge}${waitBadge}${misBadge}
-          <span style="background:#eff6ff;color:#1d4ed8;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🔗 จับคู่แล้ว ${s.invSum} ตู้</span>
-          ${loyBadge}
-          <span style="background:#f1f5f9;color:#334155;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">Σ ${total} ตู้</span>
-          <span style="font-size:22px;color:#94a3b8;line-height:1;">›</span>
-        </div>
+        ${statusBadges?`<div style="display:flex;gap:6px;flex-wrap:wrap;width:100%;">${statusBadges}</div>`:''}
       </button>`;
   };
   /* แบ่งเป็น 3 section ตามพอร์ต (ปาดัง/แหลมฉบัง/สงขลา) — โชว์เฉพาะพอร์ตที่มีเรือ */
