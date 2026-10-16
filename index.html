@@ -504,6 +504,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
             placeholder="ชื่อเรือ — เช่น OOCL AUSTRALIA 279N"
             oninput="this.value=this.value.toUpperCase();updateAutoVessel()">
           <input class="xls-date-inp" id="xls_date" type="date" onchange="updateAutoDate()">
+          <div id="vslPortSwitch" style="margin-left:auto;" title="ท่าเรือของลำนี้ — เปลี่ยนต้องใส่รหัส"></div>
         </div>
 
         <!-- Two-pane table -->
@@ -3014,6 +3015,30 @@ function loadSlotConfigs(){
   try { return JSON.parse(localStorage.getItem(SLOTS_KEY)) || []; } catch{ return []; }
 }
 function saveSlotConfigs(arr){ localStorage.setItem(SLOTS_KEY, JSON.stringify(arr)); }
+/* ── พอร์ตเรือ (ปาดัง/แหลมฉบัง/สงขลา) เก็บใน slot config · RCN 19 ต.ค.69 ── */
+const PORTS_E=[{k:'PADANG',l:'🚢 ปาดัง'},{k:'LCB',l:'⚓ แหลมฉบัง'},{k:'SONGKHLA',l:'🏖️ สงขลา'}];
+function portLabelE(k){ const p=PORTS_E.find(x=>x.k===k); return p?p.l:'🚢 ปาดัง'; }
+let VP_PORT=new Map();   /* `${vessel}|${sailDate}` → port (จาก Supabase vessel_ports — แชร์ข้ามเครื่อง) */
+async function loadVesselPorts(){
+  try{ const {data}=await sb.from('vessel_ports').select('vessel_name,sail_date,port');
+    VP_PORT=new Map((data||[]).map(r=>[String(r.vessel_name||'').trim()+'|'+String(r.sail_date||''),r.port||'PADANG'])); }
+  catch(e){ console.warn('loadVesselPorts',e); }
+}
+/* พอร์ตของลำ: Supabase (VP_PORT) ก่อน → config local → ปาดัง */
+function portOfSlot(i){ const c=loadSlotConfigs()[i]||{}; const key=(c.vessel||'').trim()+'|'+(c.sailDate||''); return VP_PORT.get(key)||c.port||'PADANG'; }
+async function setSlotPortE(i,port){
+  const cfg=loadSlotConfigs(); while(cfg.length<=i)cfg.push({}); cfg[i]=cfg[i]||{}; cfg[i].port=port; saveSlotConfigs(cfg);
+  const vessel=(cfg[i].vessel||'').trim(), date=cfg[i].sailDate||'';
+  if(vessel&&date){ VP_PORT.set(vessel+'|'+date,port);
+    try{ await sb.from('vessel_ports').upsert({vessel_name:vessel,sail_date:date,port,updated_at:new Date().toISOString()},{onConflict:'vessel_name,sail_date'}); }
+    catch(e){ console.warn('vessel_ports upsert',e); } }
+}
+/* สวิตช์ 3 พอร์ต (สไตล์เดียวกับแดชบอร์ด) — onPick = ชื่อฟังก์ชัน(port) ที่จะเรียกตอนกด */
+function portSwitchHtmlE(active,onPick){
+  return `<div style="display:inline-flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;">`+
+    PORTS_E.map(p=>`<button type="button" onclick="${onPick}('${p.k}')" style="padding:5px 12px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:${active===p.k?'#0f2a52':'transparent'};color:${active===p.k?'#fff':'#64748b'};white-space:nowrap;">${p.l}</button>`).join('')+
+  `</div>`;
+}
 function getLoyKey(i){ return SLOTS_KEY + '_loy_' + i; }
 function loadLoyRows(i){
   try { return JSON.parse(localStorage.getItem(getLoyKey(i))) || []; } catch{ return []; }
@@ -3871,6 +3896,7 @@ async function renderExcelSheet(){
   document.getElementById('vslIdxLbl').textContent = idx + 1;
   document.getElementById('xls_vessel').value = c.vessel   || '';
   document.getElementById('xls_date').value   = c.sailDate || '';
+  _renderVslPortSwitch();   /* สวิตช์ท่าเรือของลำนี้ */
 
   // ถ้ามี localStorage draft → ใช้ draft (ผู้ใช้แก้ไขไว้แล้ว)
   const hasDraft = loadInvDraft(idx).some(r => r.inv);
@@ -4112,13 +4138,15 @@ function reviseLoy(r){
   if(!row || !row.bkg){ alert('แถวนี้ไม่มีบุคกิ้ง'); return; }
   const cfgs = loadSlotConfigs();
   const opts = [];
-  for(let i=0;i<SLOT_COUNT;i++){        // เรือปลายทาง = slot ที่มีชื่อ+วันที่ ยกเว้นลำปัจจุบัน
+  const _srcPort = portOfSlot(idx);
+  for(let i=0;i<SLOT_COUNT;i++){        // เรือปลายทาง = slot ที่มีชื่อ+วันที่ ยกเว้นลำปัจจุบัน + พอร์ตเดียวกันเท่านั้น
     if(i===idx) continue;
+    if(portOfSlot(i)!==_srcPort) continue;   // ข้ามพอร์ตไม่ได้ (RCN)
     const c = cfgs[i] || {};
     if(c.vessel && c.sailDate)
       opts.push(`<option value="${i}" data-date="${h(String(c.sailDate).substring(0,10))}">${h(c.vessel)}</option>`);
   }
-  if(!opts.length){ alert('ยังไม่มีเรือปลายทางที่กำลังวางแพลน\n(ต้องมีเรือลำอื่นที่กรอกชื่อ + วันที่ไว้ก่อน)'); return; }
+  if(!opts.length){ alert('ไม่มีเรือปลายทางในท่า '+portLabelE(_srcPort)+'\n(ย้ายข้ามท่าไม่ได้ — ต้องมีเรือลำอื่นท่าเดียวกันที่วางแพลนไว้)'); return; }
   window._reviseSrc = { idx, r };
   document.getElementById('reviseInfo').textContent = 'บุคกิ้ง ' + row.bkg;
   document.getElementById('reviseVol').value = row.vol || 0;
@@ -4185,13 +4213,15 @@ function reviseInv(r){
   if(!inv && !bkg){ alert('แถวนี้ไม่มีอินวอยซ์'); return; }
   const cfgs = loadSlotConfigs();
   const opts = [];
+  const _srcPort = portOfSlot(idx);
   for(let i=0;i<SLOT_COUNT;i++){
     if(i===idx) continue;
+    if(portOfSlot(i)!==_srcPort) continue;   // ย้ายข้ามพอร์ตไม่ได้ (RCN)
     const c = cfgs[i] || {};
     if(c.vessel && c.sailDate)
       opts.push(`<option value="${i}" data-date="${h(String(c.sailDate).substring(0,10))}">${h(c.vessel)}</option>`);
   }
-  if(!opts.length){ alert('ยังไม่มีเรือปลายทางที่กำลังวางแพลน\n(ต้องมีเรือลำอื่นที่กรอกชื่อ + วันที่ไว้ก่อน)'); return; }
+  if(!opts.length){ alert('ไม่มีเรือปลายทางในท่า '+portLabelE(_srcPort)+'\n(ย้ายข้ามท่าไม่ได้ — ต้องมีเรือลำอื่นท่าเดียวกันที่วางแพลนไว้)'); return; }
   window._reviseSrc = { idx, r, mode:'inv' };
   document.getElementById('reviseInfo').textContent = 'อินวอยซ์ ' + inv + (bkg?(' · BKG '+bkg):'');
   document.getElementById('reviseVol').value = vol || 0;
@@ -4578,6 +4608,9 @@ async function saveVslCfg(){
 
   configs[idx] = { ...configs[idx], vessel, sailDate, manual:true };   /* manual=ผู้ใช้ตั้งเอง → discover ห้ามลบ (กัน re-plan เรือที่ ADD DATABASE แล้วโดนลบ) */
   saveSlotConfigs(configs);
+  /* sync พอร์ตขึ้น Supabase ด้วย (ชื่อ/วันอาจเปลี่ยน → ผูกกับ key ใหม่) */
+  if(vessel && sailDate){ const _p=configs[idx].port||'PADANG'; VP_PORT.set(vessel+'|'+sailDate,_p);
+    sb.from('vessel_ports').upsert({vessel_name:vessel,sail_date:sailDate,port:_p,updated_at:new Date().toISOString()},{onConflict:'vessel_name,sail_date'}).then(()=>{},e=>console.warn('vessel_ports cfg',e)); }
 
   const btn = document.getElementById('vslCfgBtn');
   btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
@@ -4949,6 +4982,7 @@ function onInvSelect(rowIdx){
 async function loadVessels(){
   // Discovery ก่อน (ดึง vessel configs จาก vessel_plan) แล้วค่อย render
   await discoverVesselsFromPlan();
+  await loadVesselPorts();   // พอร์ตของแต่ละลำ (Supabase)
   sortSlotsByDate();  // เรียง slot ตามวันเรือ (ใกล้สุด = ลำที่ 1)
   loadAllInvoices();  // โหลด invoice dropdown ขนาน
   showVslOverview();  // เข้าหน้ารวมเรือก่อนเสมอ
@@ -4975,7 +5009,19 @@ function openVsl(idx){
   loadAllInvoices();
 }
 // เพิ่มเรือใหม่ → หน้าต่างกรอกชื่อเรือ + วันที่ → บันทึก = เท่ากับบันทึก config เรือ
+let _addVslPort='PADANG';
+function _setAddVslPort(p){ _addVslPort=p; const box=document.getElementById('addVslPortBox'); if(box) box.innerHTML=portSwitchHtmlE(p,'_setAddVslPort'); }
+/* เปลี่ยนพอร์ตของลำที่เปิดอยู่ — ต้องใส่รหัส (เหมือนแดชบอร์ด) */
+async function _setVslPort(port){
+  if(port===portOfSlot(currentVslIdx)) return;
+  const cfg=loadSlotConfigs()[currentVslIdx]||{};
+  if(!await requirePin(_DOC_DEL_PIN, {title:'ยืนยันเปลี่ยนท่าเรือ', sub:(cfg.vessel||'เรือนี้')+' → '+portLabelE(port), icon:'🚢'})) return;
+  await setSlotPortE(currentVslIdx, port);
+  const box=document.getElementById('vslPortSwitch'); if(box) box.innerHTML=portSwitchHtmlE(port,'_setVslPort');
+}
+function _renderVslPortSwitch(){ const box=document.getElementById('vslPortSwitch'); if(box) box.innerHTML=portSwitchHtmlE(portOfSlot(currentVslIdx),'_setVslPort'); }
 function addNewVessel(){
+  _addVslPort='PADANG';
   const configs = loadSlotConfigs();
   let idx = -1;
   for(let i=0;i<SLOT_COUNT;i++){ const c=configs[i]||{}; if(!c.vessel && !loadInvDraft(i).some(r=>r.inv)){ idx=i; break; } }
@@ -4987,7 +5033,9 @@ function addNewVessel(){
     <label style="font-size:12.5px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">ชื่อเรือ</label>
     <input id="addVslName" autocomplete="off" placeholder="เช่น OOCL AUSTRALIA 279N" oninput="this.value=this.value.toUpperCase()" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;margin-bottom:14px;color:#0f2a52;">
     <label style="font-size:12.5px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">วันออกเรือ</label>
-    <input id="addVslDate" type="date" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;margin-bottom:8px;color:#0f2a52;">
+    <input id="addVslDate" type="date" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;margin-bottom:14px;color:#0f2a52;">
+    <label style="font-size:12.5px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">ท่าเรือ</label>
+    <div id="addVslPortBox" style="margin-bottom:10px;">${portSwitchHtmlE('PADANG','_setAddVslPort')}</div>
     <div id="addVslErr" style="font-size:12px;color:#dc2626;min-height:16px;margin-bottom:8px;"></div>
     <div style="display:flex;gap:8px;">
       <button onclick="document.getElementById('addVslModal').remove()" style="flex:1;padding:10px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;font-weight:700;cursor:pointer;color:#475569;">ยกเลิก</button>
@@ -5006,8 +5054,10 @@ function confirmAddVessel(slotIdx){
   if(!date){   err.textContent='⚠️ เลือกวันออกเรือก่อน'; return; }
   const configs=loadSlotConfigs();
   while(configs.length<=slotIdx) configs.push({});
-  configs[slotIdx]={vessel, sailDate:date, manual:true};   /* = บันทึก config เรือ */
+  configs[slotIdx]={vessel, sailDate:date, manual:true, port:_addVslPort};   /* = บันทึก config เรือ + พอร์ต */
   saveSlotConfigs(configs);
+  VP_PORT.set(vessel+'|'+date,_addVslPort);   /* เก็บพอร์ตขึ้น Supabase (แชร์ข้ามเครื่อง) */
+  sb.from('vessel_ports').upsert({vessel_name:vessel,sail_date:date,port:_addVslPort,updated_at:new Date().toISOString()},{onConflict:'vessel_name,sail_date'}).then(()=>{},e=>console.warn('vessel_ports add',e));
   modal.remove();
   sortSlotsByDate();                       // เรียงตามวันเรือ (ใกล้สุด = ลำที่ 1)
   const ni=findSlotIndex(vessel,date);
@@ -5181,8 +5231,7 @@ async function renderVslOverview(){
       <div style="font-weight:800;margin-bottom:4px;">❓ มีใบ BKG แล้ว แต่ยังไม่มีในแผน (${_al.orphans.length})</div>${items}
       <div style="font-size:12px;color:#b45309;margin-top:4px;">→ เปิดเรือลำนั้นแล้วเพิ่มบุคกิ้งลงแผน (อินวอยซ์หรือลอย)</div></div>`;
   }
-  html += `<div style="display:flex;flex-direction:column;gap:10px;">`;
-  sums.forEach(s=>{
+  const cardHtml = s => {
     const _va = (_al && _al.byVsl[_normVsl(s.vessel)]) || {wait:[],mis:[]};
     const waitBadge = _va.wait.length ? `<span title="ยังไม่มีใบ BKG" style="background:#fef2f2;color:#b91c1c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">⏳ รอใบ BKG: ${h(_va.wait.join(', '))}</span>` : '';
     const _orp = (_al ? _al.orphans : []).filter(c=>_normVsl(c.ai_vessel||c.vessel_name)===_normVsl(s.vessel));
@@ -5192,7 +5241,7 @@ async function renderVslOverview(){
     const loyBadge = s.loySum>0
       ? `<span style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🟠 ลอย ${s.loySum} ตู้</span>`
       : `<span style="background:#f0fdf4;color:#15803d;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">✅ จัดครบ</span>`;
-    html += `<button onclick="openVsl(${s.idx})" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 18px;border:1px solid #d7dee8;border-left:5px solid #16a34a;background:#fff;border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s;" onmouseover="this.style.background='#f0f6ff';this.style.borderLeftColor='#2563eb'" onmouseout="this.style.background='#fff';this.style.borderLeftColor='#16a34a'">
+    return `<button onclick="openVsl(${s.idx})" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 18px;border:1px solid #d7dee8;border-left:5px solid #16a34a;background:#fff;border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s;" onmouseover="this.style.background='#f0f6ff';this.style.borderLeftColor='#2563eb'" onmouseout="this.style.background='#fff';this.style.borderLeftColor='#16a34a'">
         <div style="flex:1;min-width:0;">
           <div style="font-size:16px;font-weight:800;color:#0f2a52;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h(s.vessel)}</div>
           <div style="font-size:12.5px;color:#64748b;margin-top:3px;">📅 เรือวันที่ ${fmtDate(s.date)}</div>
@@ -5205,8 +5254,18 @@ async function renderVslOverview(){
           <span style="font-size:22px;color:#94a3b8;line-height:1;">›</span>
         </div>
       </button>`;
+  };
+  /* แบ่งเป็น 3 section ตามพอร์ต (ปาดัง/แหลมฉบัง/สงขลา) — โชว์เฉพาะพอร์ตที่มีเรือ */
+  PORTS_E.forEach(p=>{
+    const grp = sums.filter(s=>portOfSlot(s.idx)===p.k);
+    if(!grp.length) return;
+    const totCtr = grp.reduce((a,s)=>a+s.invSum+s.loySum,0);
+    html += `<div style="margin:16px 0 8px;display:flex;align-items:center;gap:9px;">
+        <span style="font-size:15px;font-weight:900;color:#0f2a52;">${p.l}</span>
+        <span style="font-size:11.5px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:20px;padding:2px 11px;">${grp.length} ลำ · ${totCtr} ตู้</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">${grp.map(cardHtml).join('')}</div>`;
   });
-  html += `</div>`;
   wrap.innerHTML = html;
 }
 
@@ -5225,6 +5284,7 @@ async function forceRefresh(){
       const pl = document.getElementById('vslPlanner');
       const inPlanner = pl && pl.style.display!=='none';
       await discoverVesselsFromPlan();
+      await loadVesselPorts();   /* พอร์ตของแต่ละลำ (Supabase) */
       await loadPendingData();   /* โหลด paidOCFSet ใหม่ → badge 💰 OCF อัปเดต */
       loadAllInvoices();
       if(inPlanner){ renderExcelSheet(); }   /* อยู่หน้าจัดเรือลำไหน → รีเฟรชค้างลำนั้น */
