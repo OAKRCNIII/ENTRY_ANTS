@@ -504,7 +504,6 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
             placeholder="ชื่อเรือ — เช่น OOCL AUSTRALIA 279N"
             oninput="this.value=this.value.toUpperCase();updateAutoVessel()">
           <input class="xls-date-inp" id="xls_date" type="date" onchange="updateAutoDate()">
-          <div id="vslPortSwitch" style="margin-left:auto;" title="ท่าเรือของลำนี้ — เปลี่ยนต้องใส่รหัส"></div>
         </div>
 
         <!-- Two-pane table -->
@@ -562,6 +561,11 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
                 </tr>
               </tfoot>
             </table>
+            <!-- สวิตช์ท่าเรือของลำนี้ (ใต้ตารางลอย) — เปลี่ยนต้องใส่รหัส -->
+            <div style="margin-top:18px;padding:12px 12px 8px;border-top:1px dashed #cbd5e1;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+              <div style="font-size:11.5px;font-weight:700;color:#475569;">🛳️ ท่าเรือของลำนี้ <span style="color:#94a3b8;font-weight:400;">· เปลี่ยนต้องใส่รหัส</span></div>
+              <div id="vslPortSwitch"></div>
+            </div>
           </div>
 
         </div><!-- /xls-panes -->
@@ -3016,7 +3020,11 @@ function loadSlotConfigs(){
 }
 function saveSlotConfigs(arr){ localStorage.setItem(SLOTS_KEY, JSON.stringify(arr)); }
 /* ── พอร์ตเรือ (ปาดัง/แหลมฉบัง/สงขลา) เก็บใน slot config · RCN 19 ต.ค.69 ── */
-const PORTS_E=[{k:'PADANG',l:'🚢 ปาดัง'},{k:'LCB',l:'⚓ แหลมฉบัง'},{k:'SONGKHLA',l:'🏖️ สงขลา'}];
+const PORTS_E=[
+  {k:'PADANG',  l:'🚢 ปาดัง',   c:'#1e40af', bd:'#bfdbfe', bg:'#eff6ff'},
+  {k:'LCB',     l:'⚓ แหลมฉบัง', c:'#9d174d', bd:'#f9a8d4', bg:'#fdf2f8'},
+  {k:'SONGKHLA',l:'🏖️ สงขลา',   c:'#b45309', bd:'#fcd34d', bg:'#fffbeb'},
+];
 function portLabelE(k){ const p=PORTS_E.find(x=>x.k===k); return p?p.l:'🚢 ปาดัง'; }
 let VP_PORT=new Map();   /* `${vessel}|${sailDate}` → port (จาก Supabase vessel_ports — แชร์ข้ามเครื่อง) */
 async function loadVesselPorts(){
@@ -5231,7 +5239,7 @@ async function renderVslOverview(){
       <div style="font-weight:800;margin-bottom:4px;">❓ มีใบ BKG แล้ว แต่ยังไม่มีในแผน (${_al.orphans.length})</div>${items}
       <div style="font-size:12px;color:#b45309;margin-top:4px;">→ เปิดเรือลำนั้นแล้วเพิ่มบุคกิ้งลงแผน (อินวอยซ์หรือลอย)</div></div>`;
   }
-  const cardHtml = s => {
+  const cardHtml = (s, p) => {
     const _va = (_al && _al.byVsl[_normVsl(s.vessel)]) || {wait:[],mis:[]};
     const waitBadge = _va.wait.length ? `<span title="ยังไม่มีใบ BKG" style="background:#fef2f2;color:#b91c1c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">⏳ รอใบ BKG: ${h(_va.wait.join(', '))}</span>` : '';
     const _orp = (_al ? _al.orphans : []).filter(c=>_normVsl(c.ai_vessel||c.vessel_name)===_normVsl(s.vessel));
@@ -5241,7 +5249,7 @@ async function renderVslOverview(){
     const loyBadge = s.loySum>0
       ? `<span style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🟠 ลอย ${s.loySum} ตู้</span>`
       : `<span style="background:#f0fdf4;color:#15803d;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">✅ จัดครบ</span>`;
-    return `<button onclick="openVsl(${s.idx})" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 18px;border:1px solid #d7dee8;border-left:5px solid #16a34a;background:#fff;border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s;" onmouseover="this.style.background='#f0f6ff';this.style.borderLeftColor='#2563eb'" onmouseout="this.style.background='#fff';this.style.borderLeftColor='#16a34a'">
+    return `<button onclick="openVsl(${s.idx})" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 18px;border:1px solid #e2e8f0;border-left:5px solid ${p.c};background:#fff;border-radius:12px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='${p.bg}'" onmouseout="this.style.background='#fff'">
         <div style="flex:1;min-width:0;">
           <div style="font-size:16px;font-weight:800;color:#0f2a52;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h(s.vessel)}</div>
           <div style="font-size:12.5px;color:#64748b;margin-top:3px;">📅 เรือวันที่ ${fmtDate(s.date)}</div>
@@ -5260,11 +5268,13 @@ async function renderVslOverview(){
     const grp = sums.filter(s=>portOfSlot(s.idx)===p.k);
     if(!grp.length) return;
     const totCtr = grp.reduce((a,s)=>a+s.invSum+s.loySum,0);
-    html += `<div style="margin:16px 0 8px;display:flex;align-items:center;gap:9px;">
-        <span style="font-size:15px;font-weight:900;color:#0f2a52;">${p.l}</span>
-        <span style="font-size:11.5px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:20px;padding:2px 11px;">${grp.length} ลำ · ${totCtr} ตู้</span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:10px;">${grp.map(cardHtml).join('')}</div>`;
+    html += `<div style="border:1.5px solid ${p.bd};border-radius:16px;overflow:hidden;margin-bottom:16px;background:${p.bg};">
+        <div style="padding:11px 16px;border-bottom:1.5px solid ${p.bd};display:flex;align-items:center;gap:10px;">
+          <span style="font-size:15.5px;font-weight:900;color:${p.c};">${p.l}</span>
+          <span style="font-size:11.5px;font-weight:800;color:${p.c};background:#fff;border:1px solid ${p.bd};border-radius:20px;padding:2px 12px;">${grp.length} ลำ · ${totCtr} ตู้</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px;">${grp.map(s=>cardHtml(s,p)).join('')}</div>
+      </div>`;
   });
   wrap.innerHTML = html;
 }
