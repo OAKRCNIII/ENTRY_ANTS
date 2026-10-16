@@ -562,8 +562,8 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
               </tfoot>
             </table>
             <!-- สวิตช์ท่าเรือของลำนี้ (ใต้ตารางลอย) — เปลี่ยนต้องใส่รหัส -->
-            <div style="margin-top:18px;padding:12px 12px 8px;border-top:1px dashed #cbd5e1;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-              <div style="font-size:11.5px;font-weight:700;color:#475569;">🛳️ ท่าเรือของลำนี้ <span style="color:#94a3b8;font-weight:400;">· เปลี่ยนต้องใส่รหัส</span></div>
+            <div style="margin-top:18px;padding:14px 12px 10px;border-top:1px dashed #cbd5e1;display:flex;flex-direction:column;align-items:stretch;gap:8px;">
+              <div style="font-size:12px;font-weight:700;color:#475569;text-align:center;">🛳️ ท่าเรือของลำนี้ <span style="color:#94a3b8;font-weight:400;">· เปลี่ยนต้องใส่รหัส</span></div>
               <div id="vslPortSwitch"></div>
             </div>
           </div>
@@ -3042,9 +3042,10 @@ async function setSlotPortE(i,port){
     catch(e){ console.warn('vessel_ports upsert',e); } }
 }
 /* สวิตช์ 3 พอร์ต (สไตล์เดียวกับแดชบอร์ด) — onPick = ชื่อฟังก์ชัน(port) ที่จะเรียกตอนกด */
-function portSwitchHtmlE(active,onPick){
-  return `<div style="display:inline-flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;">`+
-    PORTS_E.map(p=>`<button type="button" onclick="${onPick}('${p.k}')" style="padding:5px 12px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:${active===p.k?'#0f2a52':'transparent'};color:${active===p.k?'#fff':'#64748b'};white-space:nowrap;">${p.l}</button>`).join('')+
+function portSwitchHtmlE(active,onPick,big){
+  const pad=big?'10px 8px':'5px 12px', fs=big?'14px':'12px', rad=big?'12px':'10px';
+  return `<div style="display:${big?'flex':'inline-flex'};${big?'width:100%;':''}gap:5px;background:#f1f5f9;border-radius:${rad};padding:4px;">`+
+    PORTS_E.map(p=>`<button type="button" onclick="${onPick}('${p.k}')" style="${big?'flex:1;':''}padding:${pad};border:none;border-radius:9px;font-size:${fs};font-weight:700;cursor:pointer;background:${active===p.k?'#0f2a52':'transparent'};color:${active===p.k?'#fff':'#64748b'};white-space:nowrap;">${p.l}</button>`).join('')+
   `</div>`;
 }
 function getLoyKey(i){ return SLOTS_KEY + '_loy_' + i; }
@@ -5025,9 +5026,9 @@ async function _setVslPort(port){
   const cfg=loadSlotConfigs()[currentVslIdx]||{};
   if(!await requirePin(_DOC_DEL_PIN, {title:'ยืนยันเปลี่ยนท่าเรือ', sub:(cfg.vessel||'เรือนี้')+' → '+portLabelE(port), icon:'🚢'})) return;
   await setSlotPortE(currentVslIdx, port);
-  const box=document.getElementById('vslPortSwitch'); if(box) box.innerHTML=portSwitchHtmlE(port,'_setVslPort');
+  const box=document.getElementById('vslPortSwitch'); if(box) box.innerHTML=portSwitchHtmlE(port,'_setVslPort',true);
 }
-function _renderVslPortSwitch(){ const box=document.getElementById('vslPortSwitch'); if(box) box.innerHTML=portSwitchHtmlE(portOfSlot(currentVslIdx),'_setVslPort'); }
+function _renderVslPortSwitch(){ const box=document.getElementById('vslPortSwitch'); if(box) box.innerHTML=portSwitchHtmlE(portOfSlot(currentVslIdx),'_setVslPort',true); }
 function addNewVessel(){
   _addVslPort='PADANG';
   const configs = loadSlotConfigs();
