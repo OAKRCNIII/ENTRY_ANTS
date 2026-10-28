@@ -5010,6 +5010,72 @@ function showVslOverview(){
   const ov = document.getElementById('vslOverview'); if(ov) ov.style.display='';
   renderVslOverview();
 }
+/* 🗑️ ลบเรือทั้งลำ — vessel_plan (เรือ+สลอต) + bkg_confirmations (บุคกิ้ง+รูป); อินวอยซ์จับคู่หลุดกลับ pool
+   แสดงรายการบุคกิ้ง/อินวอยซ์ที่จะหายก่อน + ใส่รหัส (RCN 28 ต.ค.69) */
+async function delVessel(idx){
+  const cfg = loadSlotConfigs()[idx] || {};
+  const vessel = (cfg.vessel||'').trim();
+  const sailDate = cfg.sailDate || '';
+  if(!vessel || !sailDate){ alert('เรือลำนี้ยังไม่มีชื่อ/วันที่ — ลบไม่ได้'); return; }
+  const fmtD = d => { if(!d) return '-'; const p=String(d).substring(0,10).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; };
+
+  // 1) อ่านแผนของเรือนี้ (อินวอยซ์จับคู่ + ลอย)
+  const { data: rows, error: e1 } = await sb.from('vessel_plan')
+    .select('invoice_no,bkg_no,vol')
+    .eq('sheet_name','WEB').eq('vessel_name', vessel).eq('sail_date', sailDate);
+  if(e1){ alert('อ่านข้อมูลเรือไม่สำเร็จ: '+e1.message); return; }
+  const all = rows||[];
+  const invRows = all.filter(r=> r.invoice_no && !String(r.invoice_no).toUpperCase().startsWith('LOY-'));
+  const loyRows = all.filter(r=> String(r.invoice_no||'').toUpperCase().startsWith('LOY-'));
+  const bkgs = [...new Set(all.map(r=> String(r.bkg_no||'').trim()).filter(Boolean))];
+
+  // 2) หา BKG confirmation + รูป ที่จะลบ
+  let confs = [];
+  if(bkgs.length){
+    const { data: cf } = await sb.from('bkg_confirmations').select('bkg_no,image_path').in('bkg_no', bkgs);
+    confs = cf||[];
+  }
+
+  // 3) สรุปให้เห็นก่อนลบ — บุคไหน/อินวอยซ์ไหนจะหาย
+  const L = [];
+  L.push('🚢 '+vessel+'  (เรือ '+fmtD(sailDate)+')');
+  L.push('');
+  if(invRows.length){
+    L.push('🔗 อินวอยซ์จับคู่ '+invRows.length+' ใบ → หลุดกลับเป็น "ยังไม่แพลน":');
+    invRows.forEach(r=> L.push('   • '+r.invoice_no+(r.bkg_no?' ('+r.bkg_no+')':'')+' · '+(r.vol??'-')+' ตู้'));
+  }
+  if(loyRows.length){
+    L.push('🟠 บุคกิ้งลอย '+loyRows.length+' ราย → ลบ:');
+    loyRows.forEach(r=> L.push('   • '+(r.bkg_no||'(ไม่มีเลข)')+' · '+(r.vol??'-')+' ตู้'));
+  }
+  if(confs.length) L.push('🖼️ ใบ BKG + รูป '+confs.length+' ใบ → ลบ: '+confs.map(c=>c.bkg_no).join(', '));
+  if(!all.length) L.push('(เรือนี้ไม่มีรายการในแผน)');
+  L.push('');
+  L.push('⚠️ ลบแล้วกู้คืนไม่ได้ — ยืนยันลบเรือลำนี้?');
+  if(!confirm(L.join('\n'))) return;
+
+  // 4) ใส่รหัสก่อนลบ (เหมือน action ลบอื่น)
+  if(!await requirePin(_DOC_DEL_PIN, {title:'ลบเรือ', sub:vessel+' ('+fmtD(sailDate)+')', icon:'🗑️'})) return;
+
+  // 5) ลบรูปใน storage → bkg_confirmations → vessel_plan
+  try{
+    const paths = confs.map(c=>c.image_path).filter(Boolean);
+    if(paths.length) await sb.storage.from('bkg_confirmations').remove(paths);
+    if(bkgs.length) await sb.from('bkg_confirmations').delete().in('bkg_no', bkgs);
+    const { error: e2 } = await sb.from('vessel_plan').delete()
+      .eq('sheet_name','WEB').eq('vessel_name', vessel).eq('sail_date', sailDate);
+    if(e2) throw e2;
+  }catch(e){ alert('ลบไม่สำเร็จ: '+(e.message||e)); return; }
+
+  // 6) ล้าง draft/slot local ของเรือนี้
+  localStorage.removeItem(getInvKey(idx));
+  localStorage.removeItem(getLoyKey(idx));
+  clearDbSet(idx);
+  const cfgs = loadSlotConfigs(); cfgs[idx] = {}; saveSlotConfigs(cfgs);
+
+  alert('ลบเรือ '+vessel+' แล้ว (อินวอยซ์ '+invRows.length+' · ลอย '+loyRows.length+' · BKG '+confs.length+')');
+  forceRefresh();
+}
 function openVsl(idx){
   currentVslIdx = idx;
   const ov = document.getElementById('vslOverview'); if(ov) ov.style.display='none';
@@ -5265,7 +5331,7 @@ async function renderVslOverview(){
       ? `<span style="background:#fff7ed;color:#c2410c;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">🟠 ลอย ${s.loySum} ตู้</span>`
       : `<span style="background:#f0fdf4;color:#15803d;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;">✅ จัดครบ</span>`;
     const statusBadges = `${orpBadge}${waitBadge}${misBadge}`;
-    return `<button onclick="openVsl(${s.idx})" style="display:flex;flex-direction:column;gap:9px;width:100%;text-align:left;padding:14px 18px;border:1px solid #e2e8f0;border-left:5px solid ${p.c};background:#fff;border-radius:12px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='${p.bg}'" onmouseout="this.style.background='#fff'">
+    return `<div role="button" onclick="openVsl(${s.idx})" style="display:flex;flex-direction:column;gap:9px;width:100%;box-sizing:border-box;text-align:left;padding:14px 18px;border:1px solid #e2e8f0;border-left:5px solid ${p.c};background:#fff;border-radius:12px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='${p.bg}'" onmouseout="this.style.background='#fff'">
         <div style="display:flex;align-items:center;gap:14px;width:100%;">
           <div style="flex:1;min-width:0;">
             <div style="font-size:16px;font-weight:800;color:#0f2a52;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h(s.vessel)}</div>
@@ -5276,10 +5342,11 @@ async function renderVslOverview(){
             ${loyBadge}
             <span style="background:#f1f5f9;color:#334155;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;white-space:nowrap;">Σ ${total} ตู้</span>
             <span style="font-size:22px;color:#94a3b8;line-height:1;">›</span>
+            <button type="button" onclick="event.stopPropagation();delVessel(${s.idx})" title="ลบเรือลำนี้ (รวมบุคกิ้ง + รูป)" style="width:30px;height:30px;flex-shrink:0;border:1px solid #fecaca;background:#fff1f2;color:#dc2626;border-radius:8px;font-size:14px;cursor:pointer;line-height:1;padding:0;">🗑️</button>
           </div>
         </div>
         ${statusBadges?`<div style="display:flex;gap:6px;flex-wrap:wrap;width:100%;">${statusBadges}</div>`:''}
-      </button>`;
+      </div>`;
   };
   /* แบ่งเป็น 3 section ตามพอร์ต (ปาดัง/แหลมฉบัง/สงขลา) — โชว์เฉพาะพอร์ตที่มีเรือ */
   PORTS_E.forEach(p=>{
