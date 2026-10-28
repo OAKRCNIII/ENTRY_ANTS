@@ -5186,13 +5186,21 @@ async function _bkgPlanAlerts(){
     else if(!volOk) o.mis.push(`${b} (ใบ ${c.ai_vol} / แผน ${p.vol} ตู้)`);
   });
   /* ❓ ใบที่ไม่มีในแผน — เฉพาะใบที่อัปเดตใน 21 วัน และไม่อยู่ในตาราง vessels (DATABASE) */
-  const cut=Date.now()-21*864e5;
-  let orphans=Object.values(BKG_CONF).filter(c=>{ const b=String(c.bkg_no||'').trim(); return b && !plan[b] && (Date.parse(c.updated_at||'')||0)>=cut; });
+  const cut=Date.now()-21*864e5, today=new Date().toISOString().slice(0,10);
+  /* + ข้ามใบของเรือที่ออกไปแล้ว (sail_date ในใบ < วันนี้) — สายเรือส่งใบซ้ำหลังเรือออกบ่อย (28 ต.ค.69 ZHONG GU TIAN JIN 7 ใบ) */
+  let orphans=Object.values(BKG_CONF).filter(c=>{ const b=String(c.bkg_no||'').trim(); return b && !plan[b] && (Date.parse(c.updated_at||'')||0)>=cut && !(c.sail_date && String(c.sail_date).slice(0,10)<today); });
   if(orphans.length){
+    const ids=orphans.map(c=>String(c.bkg_no).trim());
     try{
-      const { data } = await sb.from('vessels').select('booking_no').in('booking_no', orphans.map(c=>String(c.bkg_no).trim()));
+      const { data } = await sb.from('vessels').select('booking_no').in('booking_no', ids);
       const inDb=new Set((data||[]).map(r=>String(r.booking_no||'').trim()));
       orphans=orphans.filter(c=>!inDb.has(String(c.bkg_no).trim()));
+    }catch(e){}
+    /* บุคกิ้งที่อยู่ในแผนเรือเก่า (เกิน 10 วันที่โหลดข้างบน) = มีแผนแล้ว เรือออกไปแล้ว → ไม่ใช่ orphan */
+    try{
+      const { data } = await sb.from('vessel_plan').select('bkg_no').eq('sheet_name','WEB').in('bkg_no', ids);
+      const inPlan=new Set((data||[]).map(r=>String(r.bkg_no||'').trim()));
+      orphans=orphans.filter(c=>!inPlan.has(String(c.bkg_no).trim()));
     }catch(e){}
   }
   return { byVsl, orphans };
