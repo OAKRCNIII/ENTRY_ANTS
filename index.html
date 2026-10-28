@@ -5202,6 +5202,12 @@ async function _bkgPlanAlerts(){
       const inPlan=new Set((data||[]).map(r=>String(r.bkg_no||'').trim()));
       orphans=orphans.filter(c=>!inPlan.has(String(c.bkg_no).trim()));
     }catch(e){}
+    /* บุคกิ้งที่ถูกลบออกจากแผนเอง (ยกเลิก — event 'remove') หลังใบล่าสุดเข้า → ไม่ต้องเตือน (28 ต.ค.69 CNC ZHU CHENG/MATOYA ยกเลิก) */
+    try{
+      const { data } = await sb.from('booking_events').select('booking_no,event_type,at').in('booking_no', orphans.map(c=>String(c.bkg_no).trim())).order('at',{ascending:false});
+      const last={}; (data||[]).forEach(e=>{ const b=String(e.booking_no||'').trim(); if(!(b in last)) last[b]=e; });
+      orphans=orphans.filter(c=>{ const e=last[String(c.bkg_no).trim()]; return !(e && e.event_type==='remove' && (Date.parse(e.at)||0)>=(Date.parse(c.updated_at||'')||0)); });
+    }catch(e){}
   }
   return { byVsl, orphans };
 }
