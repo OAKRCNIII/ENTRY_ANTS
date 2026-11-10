@@ -3366,7 +3366,7 @@ async function gmailBkgSync(){
   try{
     const r=await fetch(SB_URL+'/functions/v1/gmail-bkg-sync',{method:'POST',
       headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':await _fnAuth()},
-      body:JSON.stringify({days:3})});
+      body:JSON.stringify({days:14})});
     const d=await r.json().catch(()=>({error:'ตอบกลับผิดรูปแบบ ('+r.status+')'}));
     if(!r.ok || d.error){ alert('📧 SYNC GMAIL ไม่สำเร็จ: '+(d.error||r.status)+(d.retry_in_s?' (อีก '+d.retry_in_s+' วิ)':'')); return; }
     await loadBkgConf(); _refreshPlannerTables();
