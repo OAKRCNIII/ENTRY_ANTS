@@ -542,7 +542,7 @@ td.xls-tot-val{text-align:center;font-weight:900;font-size:15px;color:#1b5e20;ba
               <thead>
                 <tr>
                   <th style="width:36px;">ลอย</th>
-                  <th style="min-width:170px;">BKG NO.</th>
+                  <th style="min-width:205px;">BKG NO.</th>
                   <th style="width:52px;">VOL</th>
                   <th>หมายเหตุ</th>
                   <th style="width:28px;" title="จับคู่อินวอยซ์">🔗</th>
@@ -3165,7 +3165,7 @@ function buildLoyTableHtml(loyData){
     const _sl = ld.bkg?_shipLineBadge(ld.bkg):'';
     lhtml += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:${_sl?'54px':'20px'};padding-right:${_lv?'48px':'20px'};">${ld.bkg?_bkgIcon(ld.bkg,ld.vol):''}${_sl}${_lv}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
+      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:${_sl?'54px':'20px'};padding-right:${_lv?'50px':'26px'};">${ld.bkg?_bkgIcon(ld.bkg,ld.vol):''}${_sl}${_lv}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
       <td><input id="xl_vol_${r}" type="text" value="${ld.vol||''}" readonly tabindex="-1" style="${_lro}text-align:center;"></td>
       <td><input id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" readonly tabindex="-1" style="${_lro}"></td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่อินวอยซ์" style="font-size:13px;padding:1px 5px;border:1px solid #86efac;background:#f0fdf4;border-radius:6px;cursor:pointer;">🔗</button>`:''}</td>
