@@ -3162,9 +3162,10 @@ function buildLoyTableHtml(loyData){
   for(let r=0;r<LOY_ROWS;r++){
     const ld = loyData[r] || {};
     const _lv = ld.bkg?_bkgVerBadge(ld.bkg,26):'';
+    const _sl = ld.bkg?_shipLineBadge(ld.bkg):'';
     lhtml += `<tr>
       <td class="xls-rn">${r+1}</td>
-      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:20px;padding-right:${_lv?'48px':'20px'};">${ld.bkg?_bkgIcon(ld.bkg,ld.vol):''}${_lv}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
+      <td style="position:relative;"><input id="xl_bkg_${r}" type="text" value="${h(ld.bkg||'')}" readonly tabindex="-1" style="${_lro}padding-left:${_sl?'54px':'20px'};padding-right:${_lv?'48px':'20px'};">${ld.bkg?_bkgIcon(ld.bkg,ld.vol):''}${_sl}${_lv}${ld.bkg?`<span onclick="openBkgHistory('${(ld.bkg||'').replace(/['"\\]/g,'')}')" title="ดูประวัติบุคกิ้งนี้" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:12px;line-height:1;">📜</span>`:''}</td>
       <td><input id="xl_vol_${r}" type="text" value="${ld.vol||''}" readonly tabindex="-1" style="${_lro}text-align:center;"></td>
       <td><input id="xl_rem_${r}" type="text" value="${h(ld.rem||'')}" readonly tabindex="-1" style="${_lro}"></td>
       <td style="text-align:center;">${ld.bkg?`<button type="button" onclick="assignLoy(${r})" title="จับคู่อินวอยซ์" style="font-size:13px;padding:1px 5px;border:1px solid #86efac;background:#f0fdf4;border-radius:6px;cursor:pointer;">🔗</button>`:''}</td>
@@ -3870,6 +3871,19 @@ function _bkgStampPos(bkg){
 function _bkgVerBadge(bkg, right){
   const o=_bkgNote(bkg); const v=o&&o.v; if(!v) return '';
   return `<span title="BKG version จากใบที่อัปล่าสุด" style="position:absolute;right:${right}px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:800;color:#3730a3;background:#e0e7ff;border:1px solid #c7d2fe;border-radius:5px;padding:0 4px;pointer-events:none;line-height:1.5;white-space:nowrap;">V.${woH(String(v))}</span>`;
+}
+/* แยกสายเรือจากเลขบุคกิ้ง: ตัวเลขล้วน = OOCL (ส้ม) · มีตัวอักษร (เช่น BSGZC…) = RCL (ฟ้า)
+   (RCN 26 พ.ย.69 — "BSGZC = RCL · 2345422740 = OOCL") */
+function _shipLine(bkg){
+  const b=String(bkg||'').trim().replace(/\s+/g,''); if(!b) return '';
+  return /^\d+$/.test(b) ? 'OOCL' : 'RCL';
+}
+function _shipLineBadge(bkg){
+  const L=_shipLine(bkg); if(!L) return '';
+  const c = L==='OOCL'
+    ? 'color:#c2410c;background:#ffedd5;border-color:#fdba74;'
+    : 'color:#1d4ed8;background:#dbeafe;border-color:#93c5fd;';
+  return `<span title="สายเรือ: ${L} (แยกจากเลขบุคกิ้ง)" style="position:absolute;left:18px;top:50%;transform:translateY(-50%);font-size:8px;font-weight:800;border:1px solid;border-radius:5px;padding:0 3px;pointer-events:none;line-height:1.6;white-space:nowrap;${c}">${L}</span>`;
 }
 function _bkgStampApply(it){
   const stamp=document.getElementById('bkgGalStamp'); if(!stamp) return;
